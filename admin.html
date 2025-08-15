@@ -77,6 +77,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -130,34 +131,40 @@
     <div id="dashboard" class="hidden h-screen flex flex-col bg-gray-50">
         <!-- Mobile Header -->
         <header class="bg-white shadow-sm sticky top-0 z-10">
-            <div class="flex items-center justify-between p-4 border-b border-gray-200">
-                <button id="menuBtn" class="p-3 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100">
-                    <i class="fas fa-bars text-xl"></i>
-                </button>
-                <h1 class="text-lg font-semibold text-gray-800">Dashboard</h1>
-                <div class="w-8"></div> <!-- Spacer for alignment -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-200 max-w-7xl mx-auto w-full">
+                <div class="flex items-center gap-2">
+                    <button id="menuBtn" class="p-3 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Open menu">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <h1 id="headerTitle" class="text-lg font-semibold text-gray-800">Dashboard</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="globalRefreshBtn" class="px-3 py-2 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
             </div>
         </header>
         
         <!-- Mobile Sidebar Overlay -->
-        <div id="overlay" class="overlay fixed inset-0 bg-black/40 z-20 hidden"></div>
+        <div id="overlay" class="overlay fixed inset-0 bg-black/40 z-20 hidden lg:hidden"></div>
         
         <!-- Sidebar -->
-        <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-30">
+        <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-30 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
             <div class="p-4 border-b border-gray-200">
                 <h2 class="text-lg font-bold text-gray-800">Spin Admin</h2>
                 <p class="text-sm text-gray-500">v1.0.0</p>
             </div>
-            <nav class="p-2">
-                <a href="#" class="flex items-center p-3 text-blue-600 bg-blue-50 rounded-lg mb-1">
+            <nav class="p-2" id="sideNav">
+                <a href="#" data-section="dashboard" class="nav-item flex items-center p-3 text-blue-600 bg-blue-50 rounded-lg mb-1">
                     <i class="fas fa-chart-pie mr-3"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="#" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
+                <a href="#" data-section="users" class="nav-item flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
                     <i class="fas fa-users mr-3"></i>
                     <span>Users</span>
                 </a>
-                <a href="#" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
+                <a href="#" data-section="settings" class="nav-item flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
                     <i class="fas fa-cog mr-3"></i>
                     <span>Settings</span>
                 </a>
@@ -171,7 +178,9 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto p-4">
+        <main class="flex-1 overflow-auto p-4 lg:ml-64 max-w-7xl mx-auto w-full">
+            <!-- Section: Dashboard -->
+            <section id="section-dashboard">
             <!-- Stats -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                 <!-- Total Spins Card -->
@@ -221,20 +230,36 @@
                         <i class="fas fa-history mr-2 text-blue-600"></i>
                         Recent Spins
                     </h3>
-                    <button class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
-                        <i class="fas fa-sync-alt mr-1"></i>
-                        Refresh
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <div class="hidden sm:flex items-center gap-2">
+                            <button id="bulkDeleteBtn" class="px-3 py-1.5 text-xs border border-red-300 rounded-md text-red-700 hover:bg-red-50 disabled:opacity-50" disabled>
+                                Delete Selected
+                            </button>
+                        </div>
+                        <button id="viewAllBtn" class="text-sm text-gray-700 hover:text-gray-900 flex items-center px-3 py-1.5 border border-gray-300 rounded-md">
+                            <i class="fas fa-list mr-1"></i>
+                            View All
+                        </button>
+                        <button id="listRefreshBtn" class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                            <i class="fas fa-sync-alt mr-1"></i>
+                            Refresh
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-hidden">
                     <div class="min-w-full overflow-x-auto">
                         <table class="w-full">
                             <thead class="bg-gray-50">
                                 <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-4 py-3 w-10">
+                                        <input id="selectAll" type="checkbox" class="form-checkbox h-4 w-4 text-blue-600">
+                                    </th>
                                     <th class="px-4 py-3">User</th>
                                     <th class="px-4 py-3">Prize</th>
                                     <th class="px-4 py-3">Location</th>
+                                    <th class="px-4 py-3">Timestamp</th>
                                     <th class="px-4 py-3 text-right">Time</th>
+                                    <th class="px-4 py-3 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="spinsList" class="divide-y divide-gray-100 text-sm">
@@ -243,7 +268,7 @@
                         </table>
                     </div>
                     <div class="px-4 py-3 bg-gray-50 text-right text-sm text-gray-500">
-                        <a href="#" class="font-medium text-blue-600 hover:text-blue-800">View all spins</a>
+                        <a id="viewAllLink" href="#" class="font-medium text-blue-600 hover:text-blue-800">View all spins</a>
                     </div>
                 </div>
             </div>
@@ -289,6 +314,52 @@
                     </div>
                 </div>
             </div>
+            </section>
+
+            <!-- Section: Users -->
+            <section id="section-users" class="hidden">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="px-4 py-4 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <i class="fas fa-users mr-2 text-blue-600"></i>
+                            Users
+                        </h3>
+                    </div>
+                    <div class="p-4 text-gray-600 text-sm">
+                        <p>Coming soon: user list, search, and management actions.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section: Settings -->
+            <section id="section-settings" class="hidden">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="px-4 py-4 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <i class="fas fa-cog mr-2 text-blue-600"></i>
+                            Settings
+                        </h3>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Results per page</label>
+                            <select class="input border border-gray-300 rounded-lg">
+                                <option>10</option>
+                                <option>25</option>
+                                <option>50</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Theme</label>
+                            <select class="input border border-gray-300 rounded-lg">
+                                <option>System</option>
+                                <option>Light</option>
+                                <option>Dark</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -323,18 +394,78 @@
         const menuBtn = document.getElementById('menuBtn');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('overlay');
+        const navItems = document.querySelectorAll('#sideNav .nav-item');
+        const headerTitle = document.querySelector('header h1');
+        const sections = {
+            dashboard: document.getElementById('section-dashboard'),
+            users: document.getElementById('section-users'),
+            settings: document.getElementById('section-settings'),
+        };
         
         // Mobile menu toggle
         function toggleSidebar() {
-            // Sidebar visual state can use the 'open' marker (future CSS can animate)
+            // Toggle utility classes for robust behavior (even without built CSS)
+            const isHidden = sidebar.classList.contains('-translate-x-full');
+            if (isHidden) {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                sidebar.classList.remove('translate-x-0');
+            }
+            // Maintain 'open' flag for future CSS hooks
             sidebar.classList.toggle('open');
-            // Show/hide overlay using Tailwind utilities
+            // Show/hide overlay (never on desktop)
             overlay.classList.toggle('hidden');
             document.body.style.overflow = overlay.classList.contains('hidden') ? '' : 'hidden';
         }
         
         menuBtn.addEventListener('click', toggleSidebar);
         overlay.addEventListener('click', toggleSidebar);
+
+        // Sidebar section switching
+        function setActiveNav(target) {
+            navItems.forEach((a) => {
+                a.classList.remove('text-blue-600', 'bg-blue-50');
+                a.classList.add('text-gray-600');
+            });
+            if (target) {
+                target.classList.remove('text-gray-600');
+                target.classList.add('text-blue-600', 'bg-blue-50');
+            }
+        }
+
+        function showSection(name) {
+            Object.entries(sections).forEach(([key, el]) => {
+                if (!el) return;
+                if (key === name) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            // Update header title
+            if (headerTitle) {
+                const title = name.charAt(0).toUpperCase() + name.slice(1);
+                headerTitle.textContent = title;
+            }
+        }
+
+        function setupNav() {
+            navItems.forEach((a) => {
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const section = a.dataset.section;
+                    showSection(section || 'dashboard');
+                    setActiveNav(a);
+                    // Close mobile sidebar when a link is chosen
+                    if (sidebar.classList.contains('open')) toggleSidebar();
+                });
+            });
+            // Default state
+            showSection('dashboard');
+            setActiveNav(document.querySelector('#sideNav .nav-item[data-section="dashboard"]'));
+        }
 
         // Auth state gate
         auth.onAuthStateChanged((user) => {
@@ -343,6 +474,7 @@
                 loginForm.classList.add('hidden');
                 dashboard.classList.remove('hidden');
                 loadDashboard();
+                setupNav();
             } else {
                 // Signed out
                 loginForm.classList.remove('hidden');
@@ -381,46 +513,50 @@
 
         let unsubscribeSpins = null;
         let unsubscribeStats = null;
+        let showAllSpins = false;
+        let spinsLimit = 10;
 
         // Load dashboard data
         function loadDashboard() {
-            // Load recent spins
-            unsubscribeSpins = db.collection('spins')
-                .orderBy('timestamp', 'desc')
-                .limit(10)
-                .onSnapshot((querySnapshot) => {
+            // Prevent duplicate listeners
+            if (unsubscribeSpins) { try { unsubscribeSpins(); } catch(_){} unsubscribeSpins = null; }
+            if (unsubscribeStats) { try { unsubscribeStats(); } catch(_){} unsubscribeStats = null; }
+            // Load recent spins once (no realtime refill so deletions don't backfill)
+            spinsLimit = showAllSpins ? 100 : 10;
+            function loadSpinsOnce(orderField) {
+                const q = db.collection('spins')
+                    .orderBy(orderField, 'desc')
+                    .limit(spinsLimit);
+                return q.get().then((querySnapshot) => {
                     const spins = [];
                     const users = new Set();
                     let spinCount = 0;
-                    
                     querySnapshot.forEach((doc) => {
                         const data = doc.data();
-                        spins.push({
-                            id: doc.id,
-                            ...data,
-                            // Convert Firestore timestamp to Date
-                            timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
-                        });
-                        users.add(data.userId);
+                        spins.push({ id: doc.id, ...data });
+                        if (data.userId) users.add(data.userId);
                         spinCount++;
                     });
-                    
                     updateSpinsList(spins);
-                    totalSpinsEl.textContent = spinCount;
-                    uniqueUsersEl.textContent = users.size;
+                    totalSpinsEl.textContent = String(spinCount);
+                    uniqueUsersEl.textContent = String(users.size);
                     lastUpdatedEl.textContent = new Date().toLocaleString();
-                }, (error) => {
-                    console.error("Error loading spins:", error);
-                    // Render error row
+                });
+            }
+            loadSpinsOnce('timestamp').catch((e) => {
+                console.warn('orderBy(timestamp) failed, trying createdAt', e);
+                return loadSpinsOnce('createdAt').catch((err) => {
+                    console.error('Failed to load spins:', err);
                     const tbody = document.getElementById('spinsList');
                     if (tbody) {
                         tbody.innerHTML = `
                             <tr class="bg-red-50">
-                                <td colspan="4" class="px-4 py-8 text-center text-sm text-red-600">Failed to load spins. Check network/permissions.</td>
+                                <td colspan="7" class="px-4 py-8 text-center text-sm text-red-600">Failed to load spins. Check network/permissions.</td>
                             </tr>
                         `;
                     }
                 });
+            });
 
             // Load prize distribution
             unsubscribeStats = db.collection('spins')
@@ -436,6 +572,41 @@
                     
                     updatePrizeStats(prizeCounts, totalSpins);
                 });
+        }
+
+        // Header/global refresh
+        const globalRefreshBtn = document.getElementById('globalRefreshBtn');
+        const listRefreshBtn = document.getElementById('listRefreshBtn');
+        const viewAllBtn = document.getElementById('viewAllBtn');
+        const viewAllLink = document.getElementById('viewAllLink');
+        function doRefresh() {
+            loadDashboard();
+            lastUpdatedEl.textContent = new Date().toLocaleString();
+        }
+        if (globalRefreshBtn) globalRefreshBtn.addEventListener('click', doRefresh);
+        if (listRefreshBtn) listRefreshBtn.addEventListener('click', doRefresh);
+        if (viewAllBtn) {
+            viewAllBtn.addEventListener('click', () => {
+                showAllSpins = !showAllSpins;
+                viewAllBtn.innerHTML = showAllSpins
+                    ? '<i class="fas fa-compress mr-1"></i> View Less'
+                    : '<i class="fas fa-list mr-1"></i> View All';
+                doRefresh();
+            });
+        }
+        if (viewAllLink) {
+            viewAllLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                showAllSpins = !showAllSpins;
+                if (viewAllBtn) {
+                    viewAllBtn.innerHTML = showAllSpins
+                        ? '<i class="fas fa-compress mr-1"></i> View Less'
+                        : '<i class="fas fa-list mr-1"></i> View All';
+                }
+                // Update link label too
+                viewAllLink.textContent = showAllSpins ? 'View less spins' : 'View all spins';
+                doRefresh();
+            });
         }
 
         // Update spins list in the UI
@@ -459,13 +630,19 @@
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 
-                const time = new Date(spin.timestamp);
-                const timeAgo = getTimeAgo(time);
+                const time = normalizeDate(
+                    spin.timestamp ?? spin.createdAt ?? spin.created_at ?? spin.time ?? spin.ts
+                );
+                const timeAgo = time ? getTimeAgo(time) : '—';
+                const timeExact = time ? time.toLocaleString() : '—';
                 const prizeLabel = spin && spin.status === 'location'
                     ? 'Location Captured'
                     : (spin.prize ? String(spin.prize) : 'In Progress');
                 
                 row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <input type="checkbox" class="row-select form-checkbox h-4 w-4 text-blue-600" data-id="${spin.id}">
+                    </td>
                     <td class="px-4 py-3">
                         <div class="flex items-center">
                             <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
@@ -473,7 +650,7 @@
                             </div>
                             <div>
                                 <div class="font-medium text-gray-900">${spin.userId.substring(0, 6)}...${spin.userId.substring(spin.userId.length - 4)}</div>
-                                <div class="text-xs text-gray-500">${time.toLocaleDateString()}</div>
+                                <div class="text-xs text-gray-500">${time ? time.toLocaleDateString() : '—'}</div>
                             </div>
                         </div>
                     </td>
@@ -485,14 +662,154 @@
                     <td class="px-4 py-3 text-sm text-gray-700">
                         ${formatLocation(spin)}
                     </td>
-                    <td class="px-4 py-3 text-right text-sm text-gray-500" title="${time.toLocaleString()}">
+                    <td class="px-4 py-3 text-sm text-gray-700" title="${timeExact}">
+                        ${timeExact}
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-500" title="${timeExact}">
                         ${timeAgo}
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <div class="inline-flex gap-2">
+                            <button class="text-xs text-red-600 hover:text-red-800 action-btn" data-action="delete" data-id="${spin.id}">Delete</button>
+                        </div>
                     </td>
                 `;
                 
                 tbody.appendChild(row);
             });
+
+            wireSelectionHandlers();
         }
+
+        // Selection and bulk actions
+        const selectedIds = new Set();
+        const selectAllEl = document.getElementById('selectAll');
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        
+
+        function updateBulkButtons() {
+            const hasAny = selectedIds.size > 0;
+            [bulkDeleteBtn].forEach(btn => {
+                if (!btn) return;
+                btn.disabled = !hasAny;
+            });
+            if (selectAllEl) {
+                const checkboxes = document.querySelectorAll('.row-select');
+                const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+                selectAllEl.checked = allChecked;
+                selectAllEl.indeterminate = !allChecked && hasAny;
+            }
+        }
+
+        function wireSelectionHandlers() {
+            // Row checkboxes
+            document.querySelectorAll('.row-select').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const id = cb.getAttribute('data-id');
+                    if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+                    updateBulkButtons();
+                });
+            });
+            // Header select all
+            if (selectAllEl) {
+                selectAllEl.addEventListener('change', () => {
+                    const checked = selectAllEl.checked;
+                    document.querySelectorAll('.row-select').forEach(cb => {
+                        cb.checked = checked;
+                        const id = cb.getAttribute('data-id');
+                        if (checked) selectedIds.add(id); else selectedIds.delete(id);
+                    });
+                    updateBulkButtons();
+                });
+            }
+            // Row actions via delegation
+            const tbody = document.getElementById('spinsList');
+            tbody.addEventListener('click', (e) => {
+                const btn = e.target.closest('.action-btn');
+                if (!btn) return;
+                const id = btn.getAttribute('data-id');
+                const action = btn.getAttribute('data-action');
+                if (action === 'delete') handleDelete([id]);
+            });
+            updateBulkButtons();
+        }
+
+        // Firestore operations
+        const FieldValue = firebase && firebase.firestore && firebase.firestore.FieldValue;
+        // Optional callable (if functions SDK is loaded and function deployed)
+        let callableDelete = null;
+        try { if (firebase?.functions) callableDelete = firebase.functions().httpsCallable('adminDeleteSpins'); } catch (_) {}
+
+        async function handleDelete(ids) {
+            if (!ids || ids.length === 0) return;
+            if (!confirm(`Delete ${ids.length} record(s)? This cannot be undone.`)) return;
+            if (bulkDeleteBtn) bulkDeleteBtn.disabled = true;
+
+            const results = [];
+
+            // Try server-side callable first
+            if (callableDelete) {
+                try {
+                    const res = await callableDelete({ ids: Array.from(ids) });
+                    const deleted = Number(res?.data?.deleted ?? 0);
+                    ids.slice(0, deleted).forEach(id => results.push({ id, ok: true }));
+                    if (deleted < ids.length) {
+                        ids.slice(deleted).forEach(id => results.push({ id, ok: false, error: new Error('Not deleted by function') }));
+                    }
+                } catch (err) {
+                    console.warn('Callable delete failed, falling back to client delete', err);
+                    // fall through to client path
+                }
+            }
+
+            if (results.length === 0) {
+                // Client-side deletion as fallback
+                const chunkSize = 400; // under 500 batch limit
+                for (let i = 0; i < ids.length; i += chunkSize) {
+                    const chunk = ids.slice(i, i + chunkSize);
+                    const batch = db.batch();
+                    chunk.forEach(id => batch.delete(db.collection('spins').doc(id)));
+                    try {
+                        await batch.commit();
+                        chunk.forEach(id => results.push({ id, ok: true }));
+                    } catch (e) {
+                        console.error('Batch delete failed for chunk', chunk, e);
+                        // Try individual deletes to salvage
+                        for (const id of chunk) {
+                            try {
+                                await db.collection('spins').doc(id).delete();
+                                results.push({ id, ok: true });
+                            } catch (err) {
+                                results.push({ id, ok: false, error: err });
+                            }
+                        }
+                    }
+                }
+            }
+
+            const failed = results.filter(r => !r.ok);
+            if (failed.length > 0) {
+                const ex = failed[0].error;
+                const msg = ex?.message || 'Unknown error';
+                const code = ex?.code || 'unknown';
+                alert(`Failed to delete ${failed.length} record(s). Error (${code}): ${msg}.\nEnsure your Firestore rules permit deletes (admin claim) or deploy the callable function.`);
+                loadDashboard();
+            } else {
+                selectedIds.clear();
+                updateBulkButtons();
+                results.forEach(r => {
+                    const cb = document.querySelector(`.row-select[data-id="${r.id}"]`);
+                    if (cb) {
+                        const tr = cb.closest('tr');
+                        if (tr) tr.remove();
+                    }
+                });
+            }
+            if (bulkDeleteBtn) bulkDeleteBtn.disabled = selectedIds.size === 0;
+        }
+
+        // Bulk buttons
+        if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click', () => handleDelete(Array.from(selectedIds)));
         
         function getTimeAgo(date) {
             const seconds = Math.floor((new Date() - date) / 1000);
@@ -515,6 +832,51 @@
             return 'just now';
         }
         
+        // Generic date normalizer (Firestore Timestamp, seconds/ms epoch, ISO, numeric strings)
+        function normalizeDate(v) {
+            if (!v) return null;
+            if (typeof v?.toDate === 'function') return v.toDate();
+            if (typeof v === 'object' && typeof v.seconds === 'number') return new Date(v.seconds * 1000);
+            if (typeof v === 'number') return new Date(v > 1e12 ? v : v * 1000);
+            if (typeof v === 'string') {
+                // numeric string
+                if (/^\d+$/.test(v)) {
+                    const n = Number(v);
+                    return new Date(n > 1e12 ? n : n * 1000);
+                }
+                const d = new Date(v);
+                if (!isNaN(d.getTime())) return d;
+            }
+            return null;
+        }
+
+        // Try to resolve the date when location was captured from different schema shapes
+        function getLocationCapturedDate(spin) {
+            const candidates = [
+                spin.locationTimestamp,
+                spin.locationCapturedAt,
+                spin.location_time,
+                spin.location?.timestamp,
+                spin.location?.time,
+                spin.location?.ts,
+                spin.initialLocation?.timestamp,
+                spin.geo?.timestamp,
+                // Fallbacks to general timestamps if specific location ones are missing
+                spin.location?.capturedAt,
+                spin.location?.captured_at,
+                spin.capturedAt,
+                spin.captured_at,
+                spin.createdAt,
+                spin.created_at,
+                spin.timestamp,
+            ];
+            for (const v of candidates) {
+                const d = normalizeDate(v);
+                if (d) return d;
+            }
+            return null;
+        }
+
         // Format location string from multiple possible shapes
         function formatLocation(spin) {
             const loc = spin.location || spin.initialLocation || spin.geo || {};
@@ -530,7 +892,20 @@
             // Hide invalid (0,0) placeholder
             if (Number(lat) === 0 && Number(lng) === 0) return '—';
             const f = (n) => Number(n).toFixed(4);
-            return `${f(lat)}, ${f(lng)}`;
+            const mapUrl = `https://www.google.com/maps?q=${encodeURIComponent(lat + "," + lng)}&z=16`;
+            const label = `${f(lat)}, ${f(lng)}`;
+            const capturedAt = getLocationCapturedDate(spin);
+            if (capturedAt) {
+                const ago = getTimeAgo(capturedAt);
+                const title = capturedAt.toLocaleString();
+                return `
+                    <div>
+                        <a href="${mapUrl}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${label}</a>
+                        <div class="text-xs text-gray-500" title="${title}">captured ${ago}</div>
+                    </div>
+                `;
+            }
+            return `<a href="${mapUrl}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${label}</a>`;
         }
         
         function getPrizeColorClass(prize) {

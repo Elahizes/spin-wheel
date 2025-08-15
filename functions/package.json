@@ -1,0 +1,12 @@
+{
+  "name": "spin-functions",
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.5.0",
+    "firebase-functions": "^4.5.0",
+    "spin-wheel-admin": "file:.."
+  },
+  "private": true
+}

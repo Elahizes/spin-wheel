@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spin & Win Ethiopia</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
     <style>
         .wheel {
-            width: 100%;
-            max-width: 500px;
-            aspect-ratio: 1;
+            width: min(95vw, 500px);
+            height: min(95vw, 500px);
             position: relative;
             border-radius: 50%;
             overflow: hidden;
@@ -20,14 +20,13 @@
         }
         .wheel-container {
             position: relative;
-            width: 100%;
-            max-width: 500px;
+            width: min(95vw, 500px);
             margin: 0 auto;
         }
         .wheel-center {
             position: absolute;
-            width: 50px;
-            height: 50px;
+            width: clamp(36px, 8vw, 50px);
+            height: clamp(36px, 8vw, 50px);
             background: white;
             border-radius: 50%;
             top: 50%;
@@ -39,14 +38,14 @@
         }
         .pointer {
             position: absolute;
-            top: -20px;
+            top: calc(-1 * clamp(16px, 4vw, 20px));
             left: 50%;
             transform: translateX(-50%);
             width: 0;
             height: 0;
-            border-left: 20px solid transparent;
-            border-right: 20px solid transparent;
-            border-top: 40px solid #ef4444;
+            border-left: clamp(14px, 3.5vw, 20px) solid transparent;
+            border-right: clamp(14px, 3.5vw, 20px) solid transparent;
+            border-top: clamp(28px, 7vw, 40px) solid #ef4444;
             z-index: 5;
         }
         .segment {
@@ -61,7 +60,7 @@
             justify-content: center;
             overflow: hidden;
             text-align: center;
-            padding-left: 20%;
+            padding-left: 18%;
             box-sizing: border-box;
             color: white;
             font-weight: bold;
@@ -71,7 +70,10 @@
             transform: rotate(90deg) translateY(-20px);
             transform-origin: left center;
             white-space: nowrap;
-            font-size: 14px;
+            font-size: clamp(11px, 2.8vw, 14px);
+        }
+        @media (max-width: 640px) {
+            .segment { padding-left: 15%; }
         }
     </style>
 </head>
@@ -89,7 +91,7 @@
         </div>
 
         <div class="text-center">
-            <button id="spinBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full text-lg transition-all duration-300 shadow-lg hover:shadow-xl">
+            <button id="spinBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full text-lg transition-all duration-300 shadow-lg hover:shadow-xl w-full sm:w-auto">
                 SPIN THE WHEEL
             </button>
             <div id="result" class="mt-6 text-xl font-semibold text-gray-700 min-h-8"></div>
@@ -176,6 +178,20 @@
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        // expose for waitForDbReady()
+        window.db = db;
+
+        // Ensure the user is authenticated (anonymous) so rules allowing auth pass
+        // Safe to call early; if already signed in, this is a no-op
+        (async () => {
+            try {
+                if (!firebase.auth().currentUser) {
+                    await firebase.auth().signInAnonymously();
+                }
+            } catch (e) {
+                console.warn('Anonymous sign-in failed:', e?.message || e);
+            }
+        })();
 
         // Game configuration
         const segments = [
