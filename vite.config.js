@@ -19,6 +19,6 @@ export default defineConfig({
     open: true,
   },
   optimizeDeps: {
-    include: ['chart.js', 'firebase'],
+    include: ['chart.js'],
   },
 });

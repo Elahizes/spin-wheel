@@ -411,6 +411,15 @@
                     lastUpdatedEl.textContent = new Date().toLocaleString();
                 }, (error) => {
                     console.error("Error loading spins:", error);
+                    // Render error row
+                    const tbody = document.getElementById('spinsList');
+                    if (tbody) {
+                        tbody.innerHTML = `
+                            <tr class="bg-red-50">
+                                <td colspan="4" class="px-4 py-8 text-center text-sm text-red-600">Failed to load spins. Check network/permissions.</td>
+                            </tr>
+                        `;
+                    }
                 });
 
             // Load prize distribution
@@ -438,9 +447,8 @@
                 const row = document.createElement('tr');
                 row.className = 'bg-gray-50';
                 row.innerHTML = `
-                    <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">
-                        <i class="fas fa-spinner fa-spin text-blue-500 text-lg mb-2 block"></i>
-                        <p>Loading spins...</p>
+                    <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">
+                        No spins yet.
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -453,6 +461,9 @@
                 
                 const time = new Date(spin.timestamp);
                 const timeAgo = getTimeAgo(time);
+                const prizeLabel = spin && spin.status === 'location'
+                    ? 'Location Captured'
+                    : (spin.prize ? String(spin.prize) : 'In Progress');
                 
                 row.innerHTML = `
                     <td class="px-4 py-3">
@@ -467,8 +478,8 @@
                         </div>
                     </td>
                     <td class="px-4 py-3">
-                        <span class="px-2 py-1 text-xs font-medium rounded-full ${getPrizeColorClass(spin.prize)}">
-                            ${spin.prize}
+                        <span class="px-2 py-1 text-xs font-medium rounded-full ${getPrizeColorClass(prizeLabel)}">
+                            ${prizeLabel}
                         </span>
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-700">
@@ -516,6 +527,8 @@
                 typeof loc.longitude === 'number' ? loc.longitude :
                 typeof loc.lng === 'number' ? loc.lng : null;
             if (lat == null || lng == null) return '—';
+            // Hide invalid (0,0) placeholder
+            if (Number(lat) === 0 && Number(lng) === 0) return '—';
             const f = (n) => Number(n).toFixed(4);
             return `${f(lat)}, ${f(lng)}`;
         }
