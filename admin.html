@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#3B82F6">
+    <title>Spin the Wheel - Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Mobile-friendly styles */
+        :root {
+            --primary: #3B82F6;
+            --primary-hover: #2563EB;
+        }
+        
+        html, body {
+            height: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Touch-friendly elements */
+        .btn {
+            min-height: 48px;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 12px;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+        
+        .input {
+            min-height: 48px;
+            padding: 12px 16px;
+            font-size: 16px;
+            border-radius: 8px;
+            width: 100%;
+        }
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s;
+        }
+        .fade-enter, .fade-leave-to {
+            opacity: 0;
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Login Form -->
+    <div id="loginForm" class="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md">
+            <div class="text-center mb-8">
+                <i class="fas fa-spinner text-blue-600 text-4xl mb-4"></i>
+                <h1 class="text-2xl font-bold text-gray-800">Admin Login</h1>
+                <p class="text-gray-500 mt-1">Enter your credentials to continue</p>
+            </div>
+            <form id="login" class="space-y-5">
+                <div class="space-y-1">
+                    <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-envelope text-gray-400"></i>
+                        </div>
+                        <input type="email" id="email" required autocomplete="email"
+                            class="input pl-10 w-full"
+                            placeholder="your@email.com">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-gray-400"></i>
+                        </div>
+                        <input type="password" id="password" required autocomplete="current-password"
+                            class="input pl-10 w-full"
+                            placeholder="••••••••">
+                    </div>
+                </div>
+                <div id="loginError" class="text-red-500 text-sm text-center hidden">
+                    <i class="fas fa-exclamation-circle mr-1"></i>
+                    <span>Invalid email or password</span>
+                </div>
+                <button type="submit" 
+                    class="btn btn-primary w-full flex items-center justify-center">
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    <span>Sign In</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="dashboard" class="hidden h-screen flex flex-col bg-gray-50">
+        <!-- Mobile Header -->
+        <header class="bg-white shadow-sm sticky top-0 z-10">
+            <div class="flex items-center justify-between p-4 border-b border-gray-200">
+                <button id="menuBtn" class="p-3 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <h1 class="text-lg font-semibold text-gray-800">Dashboard</h1>
+                <div class="w-8"></div> <!-- Spacer for alignment -->
+            </div>
+        </header>
+        
+        <!-- Mobile Sidebar Overlay -->
+        <div id="overlay" class="overlay fixed inset-0 bg-black z-20"></div>
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-30">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-bold text-gray-800">Spin Admin</h2>
+                <p class="text-sm text-gray-500">v1.0.0</p>
+            </div>
+            <nav class="p-2">
+                <a href="#" class="flex items-center p-3 text-blue-600 bg-blue-50 rounded-lg mb-1">
+                    <i class="fas fa-chart-pie mr-3"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
+                    <i class="fas fa-users mr-3"></i>
+                    <span>Users</span>
+                </a>
+                <a href="#" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
+                    <i class="fas fa-cog mr-3"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+                <button id="logoutBtn" class="btn btn-secondary w-full flex items-center justify-center">
+                    <i class="fas fa-sign-out-alt mr-2"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-auto p-4">
+            <!-- Stats -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <!-- Total Spins Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Total Spins</p>
+                                <h3 id="totalSpins" class="text-2xl font-bold text-gray-900">0</h3>
+                            </div>
+                            <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Unique Users Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Unique Users</p>
+                                <h3 id="uniqueUsers" class="text-2xl font-bold text-gray-900">0</h3>
+                            </div>
+                            <div class="p-3 rounded-full bg-green-100 text-green-600">
+                                <i class="fas fa-users"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Last Updated Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4">
+                        <p class="text-sm font-medium text-gray-500">Last Updated</p>
+                        <h3 id="lastUpdated" class="text-lg font-semibold text-gray-900">-</h3>
+                        <p class="text-xs text-gray-500 mt-1">Refreshes automatically</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Spins -->
+            <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Recent Spins</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prize</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="spinsList" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Loading spins...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Prize Distribution -->
+            <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Prize Distribution</h3>
+                </div>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 class="text-md font-medium text-gray-900 mb-4">By Count</h4>
+                            <div id="prizeChart" class="h-64"></div>
+                        </div>
+                        <div>
+                            <h4 class="text-md font-medium text-gray-900 mb-4">Statistics</h4>
+                            <div id="prizeStats" class="space-y-3">
+                                <!-- Stats will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Firebase configuration (same as in index.html)
+        const firebaseConfig = {
+        apiKey: "AIzaSyCO35JZoFm240m3SFLjGGzgFcsypAr_YkQ",
+        authDomain: "spin-5f3eb.firebaseapp.com",
+        projectId: "spin-5f3eb",
+        storageBucket: "spin-5f3eb.firebasestorage.app",
+        messagingSenderId: "124051980951",
+        appId: "1:124051980951:web:cffee7317163063d991fd2",
+        measurementId: "G-EG4SBN9C0H"
+    };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        
+        // DOM Elements
+        const loginForm = document.getElementById('loginForm');
+        const dashboard = document.getElementById('dashboard');
+        const loginFormElement = document.getElementById('login');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const loginError = document.getElementById('loginError');
+        const spinsList = document.getElementById('spinsList');
+        const totalSpinsEl = document.getElementById('totalSpins');
+        const uniqueUsersEl = document.getElementById('uniqueUsers');
+        const lastUpdatedEl = document.getElementById('lastUpdated');
+        const prizeStatsEl = document.getElementById('prizeStats');
+        const menuBtn = document.getElementById('menuBtn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        
+        // Mobile menu toggle
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+            document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+        }
+        
+        menuBtn.addEventListener('click', toggleSidebar);
+        overlay.addEventListener('click', toggleSidebar);
+        
+        // Handle auth state changes
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                // User is signed in
+                loginForm.classList.add('hidden');
+                dashboard.classList.remove('hidden');
+                loadDashboard();
+            } else {
+                // No user is signed in
+                loginForm.classList.remove('hidden');
+                dashboard.classList.add('hidden');
+            }
+        });
+
+        // Login handler
+        loginFormElement.onsubmit = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                await auth.signInWithEmailAndPassword(email, password);
+                // The onAuthStateChanged listener will handle the UI update
+            } catch (error) {
+                console.error("Login error:", error);
+                loginError.textContent = error.message;
+                loginError.classList.remove('hidden');
+            }
+        };
+
+        // Logout handler
+        logoutBtn.onclick = async () => {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
+            loginError.classList.add('hidden');
+            
+            // Unsubscribe from real-time updates
+            if (unsubscribeSpins) unsubscribeSpins();
+            if (unsubscribeStats) unsubscribeStats();
+        };
+
+        let unsubscribeSpins = null;
+        let unsubscribeStats = null;
+
+        // Load dashboard data
+        function loadDashboard() {
+            // Load recent spins
+            unsubscribeSpins = db.collection('spins')
+                .orderBy('timestamp', 'desc')
+                .limit(10)
+                .onSnapshot((querySnapshot) => {
+                    const spins = [];
+                    const users = new Set();
+                    let spinCount = 0;
+                    
+                    querySnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        spins.push({
+                            id: doc.id,
+                            ...data,
+                            // Convert Firestore timestamp to Date
+                            timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+                        });
+                        users.add(data.userId);
+                        spinCount++;
+                    });
+                    
+                    updateSpinsList(spins);
+                    totalSpinsEl.textContent = spinCount;
+                    uniqueUsersEl.textContent = users.size;
+                    lastUpdatedEl.textContent = new Date().toLocaleString();
+                }, (error) => {
+                    console.error("Error loading spins:", error);
+                });
+
+            // Load prize distribution
+            unsubscribeStats = db.collection('spins')
+                .onSnapshot((querySnapshot) => {
+                    const prizeCounts = {};
+                    let totalSpins = 0;
+                    
+                    querySnapshot.forEach((doc) => {
+                        const prize = doc.data().prize || 'Unknown';
+                        prizeCounts[prize] = (prizeCounts[prize] || 0) + 1;
+                        totalSpins++;
+                    });
+                    
+                    updatePrizeStats(prizeCounts, totalSpins);
+                });
+        }
+
+        // Update spins list in the UI
+        function updateSpinsList(spins) {
+            if (spins.length === 0) {
+                spinsList.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
+                            No spins recorded yet.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            spinsList.innerHTML = spins.map(spin => {
+                const time = spin.timestamp ? spin.timestamp.toLocaleString() : 'N/A';
+                let location = 'N/A';
+                
+                if (spin.location && spin.location.latitude !== null && spin.location.longitude !== null) {
+                    location = `${spin.location.latitude.toFixed(4)}, ${spin.location.longitude.toFixed(4)}`;
+                }
+                
+                return `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${spin.userId || 'Anonymous'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                ${spin.prize || 'Unknown'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${location}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${time}
+                        </td>
+                    </tr>`;
+            }).join('');
+        }
+
+        // Update prize statistics
+        function updatePrizeStats(prizeCounts, totalSpins) {
+            // Update stats list
+            let statsHTML = '';
+            
+            for (const [prize, count] of Object.entries(prizeCounts)) {
+                const percentage = ((count / totalSpins) * 100).toFixed(1);
+                
+                statsHTML += `
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="font-medium">${prize}</span>
+                            <span>${count} (${percentage}%)</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>`;
+            }
+            
+            prizeStatsEl.innerHTML = statsHTML || '<p class="text-gray-500">No data available</p>';
+        }
+
+        // Close dashboard when navigating away
+        window.addEventListener('beforeunload', () => {
+            if (unsubscribeSpins) unsubscribeSpins();
+            if (unsubscribeStats) unsubscribeStats();
+        });
+    </script>
+</body>
+</html>

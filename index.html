@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spin the Wheel Game</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <style>
+        .wheel {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1;
+            position: relative;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+            transform: rotate(0deg);
+        }
+        .wheel-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .wheel-center {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            border: 5px solid #f3f4f6;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        .pointer {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #ef4444;
+            z-index: 5;
+        }
+        .segment {
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            transform-origin: 100% 100%;
+            left: 0;
+            top: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            text-align: center;
+            padding-left: 20%;
+            box-sizing: border-box;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        .segment-text {
+            transform: rotate(90deg) translateY(-20px);
+            transform-origin: left center;
+            white-space: nowrap;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="max-w-2xl w-full bg-white rounded-xl shadow-lg p-6">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">Spin the Wheel!</h1>
+        
+        <div class="wheel-container mb-8">
+            <div class="pointer"></div>
+            <div class="wheel" id="wheel">
+                <!-- Segments will be added by JavaScript -->
+            </div>
+            <div class="wheel-center"></div>
+        </div>
+
+        <div class="text-center">
+            <button id="spinBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full text-lg transition-colors duration-300 shadow-lg">
+                SPIN THE WHEEL
+            </button>
+            <div id="result" class="mt-6 text-xl font-semibold text-gray-700 min-h-8"></div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+        apiKey: "AIzaSyCO35JZoFm240m3SFLjGGzgFcsypAr_YkQ",
+        authDomain: "spin-5f3eb.firebaseapp.com",
+        projectId: "spin-5f3eb",
+        storageBucket: "spin-5f3eb.firebasestorage.app",
+        messagingSenderId: "124051980951",
+        appId: "1:124051980951:web:cffee7317163063d991fd2",
+        measurementId: "G-EG4SBN9C0H"
+    };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Game configuration
+        const segments = [
+            { text: "10 Points", color: "#3B82F6" },
+            { text: "Try Again", color: "#10B981" },
+            { text: "20 Points", color: "#F59E0B" },
+            { text: "Free Spin", color: "#8B5CF6" },
+            { text: "50 Points", color: "#EC4899" },
+            { text: "5 Points", color: "#14B8A6" },
+            { text: "100 Points", color: "#F43F5E" },
+            { text: "2x Points", color: "#8B5CF6" }
+        ];
+
+        // Game state
+        let isSpinning = false;
+        let spinCount = 0;
+        let userLocation = null;
+        let userId = localStorage.getItem('userId');
+        
+        // Generate a unique user ID if not exists
+        if (!userId) {
+            userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('userId', userId);
+        }
+
+        // Get user's location
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        // Save initial location to Firestore
+                        saveInitialLocation();
+                    },
+                    error => {
+                        console.error("Error getting location:", error);
+                        // Continue without location if denied
+                        userLocation = { lat: null, lng: null };
+                    }
+                );
+            } else {
+                console.log("Geolocation is not supported by this browser.");
+                userLocation = { lat: null, lng: null };
+            }
+        }
+
+        // Save initial location to Firestore
+        async function saveInitialLocation() {
+            if (!userLocation) return;
+            
+            try {
+                await db.collection('userLocations').doc(userId).set({
+                    userId: userId,
+                    location: new firebase.firestore.GeoPoint(userLocation.lat, userLocation.lng),
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                console.log("Initial location saved");
+            } catch (error) {
+                console.error("Error saving location:", error);
+            }
+        }
+
+        // Save spin result to Firestore
+        async function saveSpinResult(prize) {
+            try {
+                await db.collection('spins').add({
+                    userId: userId,
+                    prize: prize,
+                    location: userLocation ? 
+                        new firebase.firestore.GeoPoint(userLocation.lat, userLocation.lng) : 
+                        null,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log("Spin result saved:", prize);
+            } catch (error) {
+                console.error("Error saving spin result:", error);
+            }
+        }
+
+        // Create wheel segments
+        function createWheel() {
+            const wheel = document.getElementById('wheel');
+            const segmentAngle = 360 / segments.length;
+            
+            segments.forEach((segment, index) => {
+                const segmentEl = document.createElement('div');
+                const rotation = index * segmentAngle;
+                const skew = 90 - segmentAngle;
+                
+                segmentEl.className = 'segment';
+                segmentEl.style.transform = `rotate(${rotation}deg) skewY(${skew}deg)`;
+                segmentEl.style.backgroundColor = segment.color;
+                
+                const textEl = document.createElement('div');
+                textEl.className = 'segment-text';
+                textEl.textContent = segment.text;
+                
+                segmentEl.appendChild(textEl);
+                wheel.appendChild(segmentEl);
+            });
+        }
+
+        // Spin the wheel
+        function spinWheel() {
+            if (isSpinning) return;
+            
+            const wheel = document.getElementById('wheel');
+            const spinBtn = document.getElementById('spinBtn');
+            const resultEl = document.getElementById('result');
+            
+            isSpinning = true;
+            spinBtn.disabled = true;
+            resultEl.textContent = '';
+            
+            // Random segment (0 to segments.length - 1)
+            const segmentIndex = Math.floor(Math.random() * segments.length);
+            const segmentAngle = 360 / segments.length;
+            
+            // Calculate rotation (5 full rotations + offset to land on segment)
+            const currentRotation = getRotationValue(wheel.style.transform);
+            const targetRotation = 1800 + (360 - (segmentIndex * segmentAngle + segmentAngle / 2));
+            const totalRotation = currentRotation + targetRotation;
+            
+            // Apply rotation with easing
+            wheel.style.transform = `rotate(${totalRotation}deg)`;
+            
+            // After animation completes
+            setTimeout(() => {
+                isSpinning = false;
+                spinBtn.disabled = false;
+                
+                const prize = segments[segmentIndex].text;
+                resultEl.textContent = `You won: ${prize}!`;
+                
+                // Save result to Firestore
+                saveSpinResult(prize);
+                
+                spinCount++;
+            }, 5000); // Match this with CSS transition duration
+        }
+
+        // Helper function to get current rotation value
+        function getRotationValue(transform) {
+            if (!transform || transform === 'none') return 0;
+            const values = transform.split('(')[1].split(')')[0].split(',');
+            const a = parseFloat(values[0]);
+            const b = parseFloat(values[1]);
+            const angle = Math.round(Math.atan2(b, a) * (180/Math.PI));
+            return angle < 0 ? angle + 360 : angle;
+        }
+
+        // Initialize the game
+        document.addEventListener('DOMContentLoaded', () => {
+            createWheel();
+            getLocation();
+            
+            // Add click event to spin button
+            document.getElementById('spinBtn').addEventListener('click', spinWheel);
+        });
+    </script>
+</body>
+</html>
