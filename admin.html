@@ -2,27 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#3B82F6">
-    <title>Spin the Wheel - Admin Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Admin dashboard for Spin Wheel application">
+    <title>Admin Dashboard - Spin Wheel</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/assets/images/logo.svg">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Styles (processed by Vite). If opening file directly, use relative path -->
+    <link rel="stylesheet" href="src/css/admin.css">
+
+    <!-- Tailwind CDN fallback for direct file open (no build) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <style>
-        /* Mobile-friendly styles */
-        :root {
-            --primary: #3B82F6;
-            --primary-hover: #2563EB;
-        }
+        /* Fixed: removed stray curly that broke CSS parsing */
         
         html, body {
             height: 100%;
             -webkit-tap-highlight-color: transparent;
         }
         
+
         /* Touch-friendly elements */
         .btn {
             min-height: 48px;
@@ -63,6 +72,14 @@
             100% { transform: rotate(360deg); }
         }
     </style>
+
+    <!-- Firebase v8 (for current inline code API) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <!-- Login Form -->
@@ -82,7 +99,7 @@
                         </div>
                         <input type="email" id="email" required autocomplete="email"
                             class="input pl-10 w-full"
-                            placeholder="your@email.com">
+                            placeholder="admin@example.com">
                     </div>
                 </div>
                 <div class="space-y-1">
@@ -123,7 +140,7 @@
         </header>
         
         <!-- Mobile Sidebar Overlay -->
-        <div id="overlay" class="overlay fixed inset-0 bg-black z-20"></div>
+        <div id="overlay" class="overlay fixed inset-0 bg-black/40 z-20 hidden"></div>
         
         <!-- Sidebar -->
         <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-30">
@@ -216,6 +233,7 @@
                                 <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     <th class="px-4 py-3">User</th>
                                     <th class="px-4 py-3">Prize</th>
+                                    <th class="px-4 py-3">Location</th>
                                     <th class="px-4 py-3 text-right">Time</th>
                                 </tr>
                             </thead>
@@ -308,41 +326,43 @@
         
         // Mobile menu toggle
         function toggleSidebar() {
+            // Sidebar visual state can use the 'open' marker (future CSS can animate)
             sidebar.classList.toggle('open');
-            overlay.classList.toggle('open');
-            document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+            // Show/hide overlay using Tailwind utilities
+            overlay.classList.toggle('hidden');
+            document.body.style.overflow = overlay.classList.contains('hidden') ? '' : 'hidden';
         }
         
         menuBtn.addEventListener('click', toggleSidebar);
         overlay.addEventListener('click', toggleSidebar);
-        
-        // Handle auth state changes
+
+        // Auth state gate
         auth.onAuthStateChanged((user) => {
             if (user) {
-                // User is signed in
+                // Signed in
                 loginForm.classList.add('hidden');
                 dashboard.classList.remove('hidden');
                 loadDashboard();
             } else {
-                // No user is signed in
+                // Signed out
                 loginForm.classList.remove('hidden');
                 dashboard.classList.add('hidden');
             }
         });
 
-        // Login handler
+        // Login handler (Firebase Auth)
         loginFormElement.onsubmit = async (e) => {
             e.preventDefault();
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            
             try {
                 await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
                 await auth.signInWithEmailAndPassword(email, password);
-                // The onAuthStateChanged listener will handle the UI update
+                loginError.classList.add('hidden');
+                // onAuthStateChanged handles UI
             } catch (error) {
-                console.error("Login error:", error);
-                loginError.textContent = error.message;
+                console.error('Login error:', error);
+                loginError.textContent = error.message || 'Invalid email or password';
                 loginError.classList.remove('hidden');
             }
         };
@@ -352,11 +372,9 @@
             try {
                 await auth.signOut();
             } catch (error) {
-                console.error("Logout error:", error);
+                console.error('Logout error:', error);
             }
             loginError.classList.add('hidden');
-            
-            // Unsubscribe from real-time updates
             if (unsubscribeSpins) unsubscribeSpins();
             if (unsubscribeStats) unsubscribeStats();
         };
@@ -453,6 +471,9 @@
                             ${spin.prize}
                         </span>
                     </td>
+                    <td class="px-4 py-3 text-sm text-gray-700">
+                        ${formatLocation(spin)}
+                    </td>
                     <td class="px-4 py-3 text-right text-sm text-gray-500" title="${time.toLocaleString()}">
                         ${timeAgo}
                     </td>
@@ -483,6 +504,22 @@
             return 'just now';
         }
         
+        // Format location string from multiple possible shapes
+        function formatLocation(spin) {
+            const loc = spin.location || spin.initialLocation || spin.geo || {};
+            const lat =
+                typeof spin.latitude === 'number' ? spin.latitude :
+                typeof loc.latitude === 'number' ? loc.latitude :
+                typeof loc.lat === 'number' ? loc.lat : null;
+            const lng =
+                typeof spin.longitude === 'number' ? spin.longitude :
+                typeof loc.longitude === 'number' ? loc.longitude :
+                typeof loc.lng === 'number' ? loc.lng : null;
+            if (lat == null || lng == null) return '—';
+            const f = (n) => Number(n).toFixed(4);
+            return `${f(lat)}, ${f(lng)}`;
+        }
+        
         function getPrizeColorClass(prize) {
             const colors = {
                 'Gold': 'bg-yellow-100 text-yellow-800',
@@ -508,35 +545,83 @@
 
         // Create chart
         function createChart(prizeData) {
+            console.log('Creating chart with data:', prizeData);
+            
             const canvas = document.getElementById('prizeChart');
             const container = document.getElementById('chartContainer');
             
-            // Hide loading state
-            container.style.display = 'none';
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            // Make sure we have valid data
+            if (!prizeData || prizeData.length === 0) {
+                console.warn('No prize data available for chart');
+                if (container) {
+                    container.style.display = 'flex';
+                    container.innerHTML = '<div class="text-center p-4 text-gray-500">No data available for the chart</div>';
+                }
+                return;
+            }
+            
+            // Hide loading state and show canvas
+            if (container) container.style.display = 'none';
             canvas.style.display = 'block';
             
+            // Clear any existing chart
+            if (window.prizeChart) {
+                window.prizeChart.destroy();
+                window.prizeChart = null;
+            }
+            
             const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.error('Could not get 2D context');
+                return;
+            }
             
             // Extract labels and data from prizeData array
-            const labels = prizeData.map(item => item[0]);
-            const data = prizeData.map(item => item[1]);
+            const labels = prizeData.map(item => String(item[0] || 'Unknown'));
+            const data = prizeData.map(item => Number(item[1]) || 0);
             
             // Generate colors based on prize names
             const backgroundColors = labels.map(prize => {
-                const colorClass = getPrizeColorClass(prize).split(' ')[0];
-                return getComputedStyle(document.documentElement)
-                    .getPropertyValue(`--${colorClass.split('-')[1]}`) || '#3B82F6';
+                try {
+                    const colorClass = getPrizeColorClass(prize).split(' ')[0];
+                    const color = getComputedStyle(document.documentElement)
+                        .getPropertyValue(`--${colorClass.split('-')[1]}`) || '#3B82F6';
+                    return color || '#3B82F6';
+                } catch (e) {
+                    console.error('Error getting color for prize:', prize, e);
+                    return '#3B82F6';
+                }
             });
             
             // Create gradient for each color
-            const gradientColors = backgroundColors.map((color, i) => {
-                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-                gradient.addColorStop(0, color);
-                gradient.addColorStop(1, lightenColor(color, 30));
-                return gradient;
+            const gradientColors = backgroundColors.map((color) => {
+                try {
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                    gradient.addColorStop(0, color);
+                    gradient.addColorStop(1, lightenColor(color, 30));
+                    return gradient;
+                } catch (e) {
+                    console.error('Error creating gradient:', e);
+                    return color;
+                }
             });
             
-            window.prizeChart = new Chart(ctx, {
+            // Ensure we have valid data before creating chart
+            if (data.every(val => val === 0)) {
+                console.warn('All chart data values are zero');
+                if (container) {
+                    container.style.display = 'flex';
+                    container.innerHTML = '<div class="text-center p-4 text-gray-500">No spin data available yet</div>';
+                }
+                return;
+            }
+                
+                window.prizeChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: labels,
@@ -615,12 +700,23 @@
 
         // Update prize statistics
         function updatePrizeStats(prizeCounts, totalSpins) {
-            // Update total count
-            document.getElementById('totalPrizes').textContent = totalSpins;
+            console.log('Updating prize stats:', { prizeCounts, totalSpins });
             
-            // Sort prizes by count (descending)
+            if (!prizeCounts || typeof prizeCounts !== 'object') {
+                console.error('Invalid prizeCounts:', prizeCounts);
+                return;
+            }
+            
+            // Convert prizeCounts to array of [prize, count] pairs and sort by count (descending)
             const sortedPrizes = Object.entries(prizeCounts)
+                .filter(([prize, count]) => prize && count !== undefined)
                 .sort((a, b) => b[1] - a[1]);
+            
+            // Update total count if element exists
+            const totalEl = document.getElementById('totalPrizes');
+            if (totalEl) {
+                totalEl.textContent = totalSpins || 0;
+            }
             
             // Update stats list with animations
             let statsHTML = '';
@@ -654,12 +750,8 @@
             
             document.getElementById('prizeStats').innerHTML = statsHTML;
             
-            // Update chart
-            if (window.prizeChart) {
-                updateChart(sortedPrizes);
-            } else {
-                createChart(sortedPrizes);
-            }
+            // Always use updateChart which will handle initialization if needed
+            updateChart(sortedPrizes);
             
             // Add animation styles if not already added
             if (!document.getElementById('animations')) {
@@ -680,10 +772,73 @@
 
         // Update chart
         function updateChart(prizeData) {
-            const chart = window.prizeChart;
-            chart.data.labels = prizeData.map(item => item[0]);
-            chart.data.datasets[0].data = prizeData.map(item => item[1]);
-            chart.update();
+            console.log('Updating chart with data:', prizeData);
+            
+            // Safely destroy existing chart if it exists
+            const safeDestroyChart = () => {
+                try {
+                    if (window.prizeChart && typeof window.prizeChart.destroy === 'function') {
+                        window.prizeChart.destroy();
+                    }
+                } catch (e) {
+                    console.error('Error destroying chart:', e);
+                } finally {
+                    window.prizeChart = null;
+                }
+            };
+            
+            // If no data, clear the chart
+            if (!prizeData || prizeData.length === 0) {
+                safeDestroyChart();
+                const container = document.getElementById('chartContainer');
+                if (container) {
+                    container.style.display = 'flex';
+                    container.innerHTML = '<div class="text-center p-4 text-gray-500">No data available for the chart</div>';
+                }
+                return;
+            }
+            
+            // If no chart exists, create a new one
+            if (!window.prizeChart) {
+                createChart(prizeData);
+                return;
+            }
+            
+            try {
+                const chart = window.prizeChart;
+                if (chart && chart.data && chart.update) {
+                    // Update chart data
+                    chart.data.labels = prizeData.map(item => String(item[0] || 'Unknown'));
+                    chart.data.datasets[0].data = prizeData.map(item => Number(item[1]) || 0);
+                    
+                    // Update colors
+                    chart.data.datasets[0].backgroundColor = prizeData.map(item => {
+                        try {
+                            const colorClass = getPrizeColorClass(String(item[0])).split(' ')[0];
+                            return getComputedStyle(document.documentElement)
+                                .getPropertyValue(`--${colorClass.split('-')[1]}`) || '#3B82F6';
+                        } catch (e) {
+                            console.error('Error getting color:', e);
+                            return '#3B82F6';
+                        }
+                    });
+                    
+                    // Update the chart
+                    chart.update({
+                        duration: 800,
+                        easing: 'easeOutQuart'
+                    });
+                } else {
+                    // If chart is in a bad state, recreate it
+                    safeDestroyChart();
+                    createChart(prizeData);
+                }
+            } catch (error) {
+                console.error('Error updating chart:', error);
+                // If update fails, recreate the chart
+                safeDestroyChart();
+                createChart(prizeData);
+            }
         }
 
         // Close dashboard when navigating away
