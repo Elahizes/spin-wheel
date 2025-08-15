@@ -198,44 +198,74 @@
             </div>
 
             <!-- Recent Spins -->
-            <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
-                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Recent Spins</h3>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                <div class="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                        <i class="fas fa-history mr-2 text-blue-600"></i>
+                        Recent Spins
+                    </h3>
+                    <button class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                        <i class="fas fa-sync-alt mr-1"></i>
+                        Refresh
+                    </button>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prize</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="spinsList" class="bg-white divide-y divide-gray-200">
-                            <tr>
-                                <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Loading spins...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="overflow-hidden">
+                    <div class="min-w-full overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-4 py-3">User</th>
+                                    <th class="px-4 py-3">Prize</th>
+                                    <th class="px-4 py-3 text-right">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="spinsList" class="divide-y divide-gray-100 text-sm">
+                                <!-- Spins will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="px-4 py-3 bg-gray-50 text-right text-sm text-gray-500">
+                        <a href="#" class="font-medium text-blue-600 hover:text-blue-800">View all spins</a>
+                    </div>
                 </div>
             </div>
 
             <!-- Prize Distribution -->
-            <div class="bg-white shadow overflow-hidden sm:rounded-lg">
-                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Prize Distribution</h3>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-4 py-4 border-b border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                        <i class="fas fa-chart-pie mr-2 text-blue-600"></i>
+                        Prize Distribution
+                    </h3>
                 </div>
-                <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="p-4">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Prize Stats -->
                         <div>
-                            <h4 class="text-md font-medium text-gray-900 mb-4">By Count</h4>
-                            <div id="prizeChart" class="h-64"></div>
-                        </div>
-                        <div>
-                            <h4 class="text-md font-medium text-gray-900 mb-4">Statistics</h4>
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-medium text-gray-500">PRIZE BREAKDOWN</h4>
+                                <span class="text-xs text-gray-400">Total: <span id="totalPrizes">0</span></span>
+                            </div>
                             <div id="prizeStats" class="space-y-3">
-                                <!-- Stats will be populated by JavaScript -->
+                                <div class="animate-pulse space-y-3">
+                                    <div class="h-10 bg-gray-100 rounded-lg"></div>
+                                    <div class="h-10 bg-gray-100 rounded-lg"></div>
+                                    <div class="h-10 bg-gray-100 rounded-lg"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Chart -->
+                        <div class="lg:border-l lg:border-gray-100 lg:pl-6">
+                            <h4 class="text-sm font-medium text-gray-500 mb-3">DISTRIBUTION</h4>
+                            <div class="h-64 flex items-center justify-center">
+                                <div id="chartContainer" class="w-full h-full flex items-center justify-center">
+                                    <div class="text-center">
+                                        <i class="fas fa-chart-pie text-gray-300 text-4xl mb-2"></i>
+                                        <p class="text-sm text-gray-500">Loading chart data...</p>
+                                    </div>
+                                </div>
+                                <canvas id="prizeChart" class="w-full h-full max-h-64"></canvas>
                             </div>
                         </div>
                     </div>
@@ -383,65 +413,277 @@
 
         // Update spins list in the UI
         function updateSpinsList(spins) {
+            const tbody = document.getElementById('spinsList');
+            tbody.innerHTML = '';
+            
             if (spins.length === 0) {
-                spinsList.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
-                            No spins recorded yet.
-                        </td>
-                    </tr>`;
+                const row = document.createElement('tr');
+                row.className = 'bg-gray-50';
+                row.innerHTML = `
+                    <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-blue-500 text-lg mb-2 block"></i>
+                        <p>Loading spins...</p>
+                    </td>
+                `;
+                tbody.appendChild(row);
                 return;
             }
-
-            spinsList.innerHTML = spins.map(spin => {
-                const time = spin.timestamp ? spin.timestamp.toLocaleString() : 'N/A';
-                let location = 'N/A';
+            
+            spins.forEach(spin => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
                 
-                if (spin.location && spin.location.latitude !== null && spin.location.longitude !== null) {
-                    location = `${spin.location.latitude.toFixed(4)}, ${spin.location.longitude.toFixed(4)}`;
+                const time = new Date(spin.timestamp);
+                const timeAgo = getTimeAgo(time);
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="flex items-center">
+                            <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">${spin.userId.substring(0, 6)}...${spin.userId.substring(spin.userId.length - 4)}</div>
+                                <div class="text-xs text-gray-500">${time.toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 text-xs font-medium rounded-full ${getPrizeColorClass(spin.prize)}">
+                            ${spin.prize}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-500" title="${time.toLocaleString()}">
+                        ${timeAgo}
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+        
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            
+            let interval = Math.floor(seconds / 31536000);
+            if (interval >= 1) return interval + 'y ago';
+            
+            interval = Math.floor(seconds / 2592000);
+            if (interval >= 1) return interval + 'mo ago';
+            
+            interval = Math.floor(seconds / 86400);
+            if (interval >= 1) return interval + 'd ago';
+            
+            interval = Math.floor(seconds / 3600);
+            if (interval >= 1) return interval + 'h ago';
+            
+            interval = Math.floor(seconds / 60);
+            if (interval >= 1) return interval + 'm ago';
+            
+            return 'just now';
+        }
+        
+        function getPrizeColorClass(prize) {
+            const colors = {
+                'Gold': 'bg-yellow-100 text-yellow-800',
+                'Silver': 'bg-gray-100 text-gray-800',
+                'Bronze': 'bg-amber-100 text-amber-800',
+                'Try Again': 'bg-gray-100 text-gray-500',
+                'Free Spin': 'bg-green-100 text-green-800',
+                'Special Prize': 'bg-purple-100 text-purple-800',
+                'Discount': 'bg-blue-100 text-blue-800',
+                'Gift Card': 'bg-red-100 text-red-800'
+            };
+            
+            // Find the best matching color class
+            for (const [key, value] of Object.entries(colors)) {
+                if (prize.toLowerCase().includes(key.toLowerCase())) {
+                    return value;
                 }
-                
-                return `
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            ${spin.userId || 'Anonymous'}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                ${spin.prize || 'Unknown'}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            ${location}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            ${time}
-                        </td>
-                    </tr>`;
-            }).join('');
+            }
+            
+            // Default color if no match found
+            return 'bg-gray-100 text-gray-800';
+        }
+
+        // Create chart
+        function createChart(prizeData) {
+            const canvas = document.getElementById('prizeChart');
+            const container = document.getElementById('chartContainer');
+            
+            // Hide loading state
+            container.style.display = 'none';
+            canvas.style.display = 'block';
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Extract labels and data from prizeData array
+            const labels = prizeData.map(item => item[0]);
+            const data = prizeData.map(item => item[1]);
+            
+            // Generate colors based on prize names
+            const backgroundColors = labels.map(prize => {
+                const colorClass = getPrizeColorClass(prize).split(' ')[0];
+                return getComputedStyle(document.documentElement)
+                    .getPropertyValue(`--${colorClass.split('-')[1]}`) || '#3B82F6';
+            });
+            
+            // Create gradient for each color
+            const gradientColors = backgroundColors.map((color, i) => {
+                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, lightenColor(color, 30));
+                return gradient;
+            });
+            
+            window.prizeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: gradientColors,
+                        borderWidth: 0,
+                        borderRadius: 4,
+                        spacing: 2,
+                        hoverOffset: 8,
+                        weight: 0.7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    layout: {
+                        padding: 10
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                            titleFont: {
+                                family: 'Inter',
+                                size: 12
+                            },
+                            bodyFont: {
+                                family: 'Inter',
+                                size: 14,
+                                weight: '600'
+                            },
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true
+                    },
+                    onHover: (event, chartElement) => {
+                        if (event.native && event.native.target) {
+                            event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Helper function to lighten colors
+        function lightenColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = (num >> 16) + amt;
+            const G = (num >> 8 & 0x00FF) + amt;
+            const B = (num & 0x0000FF) + amt;
+            return '#' + (
+                0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+                (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+                (B < 255 ? B < 1 ? 0 : B : 255)
+            ).toString(16).slice(1);
         }
 
         // Update prize statistics
         function updatePrizeStats(prizeCounts, totalSpins) {
-            // Update stats list
+            // Update total count
+            document.getElementById('totalPrizes').textContent = totalSpins;
+            
+            // Sort prizes by count (descending)
+            const sortedPrizes = Object.entries(prizeCounts)
+                .sort((a, b) => b[1] - a[1]);
+            
+            // Update stats list with animations
             let statsHTML = '';
             
-            for (const [prize, count] of Object.entries(prizeCounts)) {
+            sortedPrizes.forEach(([prize, count]) => {
                 const percentage = ((count / totalSpins) * 100).toFixed(1);
+                const colorClass = getPrizeColorClass(prize).split(' ')[0];
                 
                 statsHTML += `
-                    <div>
-                        <div class="flex justify-between text-sm mb-1">
-                            <span class="font-medium">${prize}</span>
-                            <span>${count} (${percentage}%)</span>
+                    <div class="prize-stat-item opacity-0 transform translate-y-2 animate-fadeInUp" 
+                         style="animation-delay: ${sortedPrizes.indexOf([prize, count]) * 50}ms">
+                        <div class="flex justify-between items-center text-sm mb-1">
+                            <div class="flex items-center">
+                                <span class="h-2 w-2 rounded-full mr-2 ${colorClass}"></span>
+                                <span class="font-medium text-gray-900 truncate max-w-[120px]">${prize}</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="font-semibold text-gray-900 mr-2">${count}</span>
+                                <span class="text-gray-500 text-xs">${percentage}%</span>
+                            </div>
                         </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-blue-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                            <div class="h-full ${colorClass} rounded-full" 
+                                 style="width: ${percentage}%;
+                                        transition: width 0.8s ease-in-out;">
+                            </div>
                         </div>
-                    </div>`;
+                    </div>
+                `;
+            });
+            
+            document.getElementById('prizeStats').innerHTML = statsHTML;
+            
+            // Update chart
+            if (window.prizeChart) {
+                updateChart(sortedPrizes);
+            } else {
+                createChart(sortedPrizes);
             }
             
-            prizeStatsEl.innerHTML = statsHTML || '<p class="text-gray-500">No data available</p>';
+            // Add animation styles if not already added
+            if (!document.getElementById('animations')) {
+                const style = document.createElement('style');
+                style.id = 'animations';
+                style.textContent = `
+                    @keyframes fadeInUp {
+                        from { opacity: 0; transform: translateY(8px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    .animate-fadeInUp {
+                        animation: fadeInUp 0.3s ease-out forwards;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+
+        // Update chart
+        function updateChart(prizeData) {
+            const chart = window.prizeChart;
+            chart.data.labels = prizeData.map(item => item[0]);
+            chart.data.datasets[0].data = prizeData.map(item => item[1]);
+            chart.update();
         }
 
         // Close dashboard when navigating away
