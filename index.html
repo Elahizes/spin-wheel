@@ -292,27 +292,45 @@
             });
         }
 
-        function handleLocationSuccess(position, resolve) {
+        function handleLocationSuccess(position, resolve, isHighAccuracy = true) {
+            console.log(`Got ${isHighAccuracy ? 'high' : 'low'} accuracy location:`, position);
+            
             userLocation = {
                 lat: position.coords.latitude,
                 lng: position.coords.longitude,
-                accuracy: position.coords.accuracy
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp || Date.now(),
+                source: isHighAccuracy ? 'gps' : 'network',
+                altitude: position.coords.altitude,
+                altitudeAccuracy: position.coords.altitudeAccuracy,
+                heading: position.coords.heading,
+                speed: position.coords.speed
             };
             
-            // Update lastValidLocation if this is more accurate or we don't have one yet
-            if (!lastValidLocation || 
-                (userLocation.accuracy && 
-                 (!lastValidLocation.accuracy || userLocation.accuracy < lastValidLocation.accuracy))) {
+            console.log('Location details:', {
+                coordinates: `${userLocation.lat}, ${userLocation.lng}`,
+                accuracy: `${userLocation.accuracy} meters`,
+                source: userLocation.source,
+                timestamp: new Date(userLocation.timestamp).toISOString()
+            });
+            
+            // Accept location if accuracy is good enough
+            if (isValidLocation(userLocation)) {
                 lastValidLocation = { ...userLocation };
+                hideLocationBanner();
+                
+                // Send location to server if we have a database connection
+                waitForDbReady().then(() => {
+                    sendInitialLocationOnce().catch(console.error);
+                });
+                
+                return true;
+            } else {
+                const accuracyMsg = `Location accuracy (${Math.round(userLocation.accuracy)}m) is not precise enough.`;
+                console.warn(accuracyMsg);
+                showLocationBanner(accuracyMsg + ' Trying again...');
+                return false;
             }
-            
-            // Send location to server in background
-            setTimeout(async () => {
-                await waitForDbReady();
-                await sendInitialLocationOnce();
-            }, 300);
-            
-            resolve(userLocation);
         }
 
         // Start/Stop continuous watcher with better error handling and accuracy management
@@ -475,14 +493,14 @@
             hideLocationBanner();
         }
 
-        function showLocationBanner() {
+        function showLocationBanner(message = 'Please enable location to capture your coordinates for the admin dashboard.') {
             if (initialLocationSent) return;
             // Create a simple top banner
             const banner = document.createElement('div');
             banner.id = 'locBanner';
             banner.className = 'fixed top-0 left-0 right-0 z-50 bg-blue-600 text-white text-sm px-4 py-3 shadow flex items-center justify-between';
             banner.innerHTML = `
-                <span class="mr-3">Enable location to capture your coordinates for the admin dashboard.</span>
+                <span class="mr-3">${message}</span>
                 <div class="flex items-center gap-2">
                   <button id="locEnableBtn" class="bg-white text-blue-700 font-medium px-3 py-1 rounded hover:bg-blue-50">Enable Location</button>
                   <button id="locDismissBtn" class="border border-white/60 text-white px-2 py-1 rounded hover:bg-white/10">Dismiss</button>
@@ -540,31 +558,28 @@
         // Spin the wheel
         function spinWheel() {
             if (isSpinning) return;
+            
+            // Get DOM elements once
+            const wheel = document.getElementById('wheel');
+            const resultEl = document.getElementById('result');
+            const spinBtn = document.getElementById('spinButton');
+            
+            // Update UI state
             isSpinning = true;
+            spinBtn.disabled = true;
+            spinBtn.classList.add('opacity-50');
+            resultEl.textContent = '';
             
             // Add haptic feedback if available
             if ('vibrate' in navigator) {
                 navigator.vibrate(50);
             }
             
-            // Disable spin button with visual feedback
-            const spinBtn = document.getElementById('spinButton');
-            spinBtn.disabled = true;
-            spinBtn.classList.add('opacity-50');
-            
             // Play sound if available
             if (typeof spinSound !== 'undefined') {
                 spinSound.currentTime = 0;
                 spinSound.play().catch(e => console.log('Audio play failed:', e));
             }
-            
-            const wheel = document.getElementById('wheel');
-            const spinBtn = document.getElementById('spinButton');
-            const resultEl = document.getElementById('result');
-            
-            isSpinning = true;
-            spinBtn.disabled = true;
-            resultEl.textContent = '';
             
             // Random segment (0 to segments.length - 1)
             const segmentIndex = Math.floor(Math.random() * segments.length);
@@ -650,10 +665,92 @@
             }, { passive: true });
         }
         
+        // Function to check location permissions
+        async function checkLocationPermission() {
+            if (!navigator.permissions) return true; // Skip if permissions API not supported
+            
+            try {
+                const status = await navigator.permissions.query({ name: 'geolocation' });
+                return status.state === 'granted';
+            } catch (e) {
+                console.warn('Permission query failed:', e);
+                return true; // Assume granted if we can't check
+            }
+        }
+        
+        // Function to initialize location services
+        async function initializeLocation() {
+            if (!navigator.geolocation) {
+                console.warn('Geolocation not supported');
+                showLocationBanner('Your device does not support geolocation.');
+                return false;
+            }
+            
+            // Check if we already have permission
+            const hasPermission = await checkLocationPermission();
+            if (!hasPermission) {
+                showLocationBanner('Please enable location services in your browser settings.');
+                return false;
+            }
+
+            // On mobile, we need to request permission first
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                console.log('Mobile device detected, requesting location...');
+                try {
+                    // First try high accuracy
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(
+                            resolve,
+                            (error) => reject({ error, type: 'high' }),
+                            { 
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 0
+                            }
+                        );
+                    });
+                    
+                    handleLocationSuccess(position, true);
+                } catch (error) {
+                    console.warn('High accuracy failed, trying low accuracy...', error);
+                    try {
+                        // Fallback to network-based location
+                        const position = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(
+                                resolve,
+                                (error) => reject({ error, type: 'low' }),
+                                { 
+                                    enableHighAccuracy: false,
+                                    timeout: 15000,
+                                    maximumAge: 0
+                                }
+                            );
+                        });
+                        
+                        handleLocationSuccess(position, false);
+                    } catch (finalError) {
+                        console.error('All location attempts failed:', finalError);
+                        showLocationBanner('Could not get your location. Please enable location services.');
+                    }
+                }
+            } else {
+                // Desktop behavior
+                startLocationWatcher();
+                requestLocation().then(async () => {
+                    await waitForValidLocation(5000);
+                    await waitForDbReady();
+                    await sendInitialLocationOnce();
+                });
+            }
+        }
+
         // Initialize the game
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             createWheel();
             initTouchControls();
+            
+            // Start location services
+            initializeLocation();
             
             // Add touch feedback to buttons
             document.querySelectorAll('button').forEach(btn => {
