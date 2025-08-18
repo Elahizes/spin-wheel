@@ -160,6 +160,10 @@
                     <i class="fas fa-chart-pie mr-3"></i>
                     <span>Dashboard</span>
                 </a>
+                <a href="#" data-section="winners" class="nav-item flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
+                    <i class="fas fa-trophy mr-3"></i>
+                    <span>Winners</span>
+                </a>
                 <a href="#" data-section="users" class="nav-item flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg mb-1">
                     <i class="fas fa-users mr-3"></i>
                     <span>Users</span>
@@ -316,6 +320,43 @@
             </div>
             </section>
 
+            <!-- Section: Winners -->
+            <section id="section-winners" class="hidden">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                    <div class="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <i class="fas fa-trophy mr-2 text-yellow-500"></i>
+                            Winners List
+                        </h3>
+                        <div class="flex items-center gap-3">
+                            <button id="exportWinnersBtn" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                                <i class="fas fa-file-export mr-1"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-4 py-3">Winner</th>
+                                    <th class="px-4 py-3">Prize</th>
+                                    <th class="px-4 py-3">Contact</th>
+                                    <th class="px-4 py-3">Address</th>
+                                    <th class="px-4 py-3">Won On</th>
+                                    <th class="px-4 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="winnersList" class="divide-y divide-gray-100 text-sm">
+                                <!-- Winners will be loaded here -->
+                                <tr>
+                                    <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Loading winners...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- Section: Users -->
             <section id="section-users" class="hidden">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -399,6 +440,7 @@
         const sections = {
             dashboard: document.getElementById('section-dashboard'),
             users: document.getElementById('section-users'),
+            winners: document.getElementById('section-winners'),
             settings: document.getElementById('section-settings'),
         };
         
@@ -609,6 +651,18 @@
             });
         }
 
+        // Helper to safely format address components
+        function formatAddress(spin) {
+            if (!spin) return '';
+            const parts = [];
+            if (spin.houseNumber) parts.push(spin.houseNumber);
+            if (spin.woreda) parts.push(`Woreda ${spin.woreda}`);
+            if (spin.kebele) parts.push(`Kebele ${spin.kebele}`);
+            if (spin.city) parts.push(spin.city);
+            if (spin.region) parts.push(spin.region);
+            return parts.join(', ');
+        }
+
         // Update spins list in the UI
         function updateSpinsList(spins) {
             const tbody = document.getElementById('spinsList');
@@ -659,8 +713,13 @@
                             ${prizeLabel}
                         </span>
                     </td>
-                    <td class="px-4 py-3 text-sm text-gray-700">
-                        ${formatLocation(spin)}
+                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        <div class="address-details">
+                            ${formatLocation(spin)}
+                            ${spin.region ? `<div class="text-xs text-gray-500">${spin.region} ${spin.city ? `, ${spin.city}` : ''}</div>` : ''}
+                            ${spin.woreda || spin.kebele ? `<div class="text-xs text-gray-500">${spin.woreda ? `Woreda ${spin.woreda}` : ''}${spin.kebele ? `, Kebele ${spin.kebele}` : ''}</div>` : ''}
+                            ${spin.houseNumber ? `<div class="text-xs text-gray-500">${spin.houseNumber}</div>` : ''}
+                        </div>
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-700" title="${timeExact}">
                         ${timeExact}

