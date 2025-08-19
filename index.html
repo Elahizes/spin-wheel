@@ -618,7 +618,7 @@
             // Get DOM elements once
             const wheel = document.getElementById('wheel');
             const resultEl = document.getElementById('result');
-            const spinBtn = document.getElementById('spinButton');
+            const spinBtn = document.getElementById('spinBtn');
             
             // Update UI state
             isSpinning = true;
@@ -652,7 +652,7 @@
             // Reset after spin completes
             setTimeout(() => {
                 isSpinning = false;
-                const spinBtn = document.getElementById('spinButton');
+                const spinBtn = document.getElementById('spinBtn');
                 spinBtn.disabled = false;
                 spinBtn.classList.remove('opacity-50');
                 
@@ -1190,7 +1190,7 @@
                 initTouchControls();
                 
                 // Set up spin button
-                const spinBtn = document.getElementById('spinButton');
+                const spinBtn = document.getElementById('spinBtn');
                 if (spinBtn) {
                     spinBtn.addEventListener('click', spinWheel);
                 }
