@@ -207,6 +207,28 @@
             const app = firebase.initializeApp(firebaseConfig);
             db = firebase.firestore();
             console.log('Firebase initialized successfully');
+            
+            // Set up auth state persistence
+            firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+                .then(() => {
+                    // Try to sign in anonymously if no user is signed in
+                    if (!firebase.auth().currentUser) {
+                        return firebase.auth().signInAnonymously()
+                            .then(() => console.log('Anonymous sign-in successful'))
+                            .catch(error => {
+                                if (error.code === 'auth/admin-restricted-operation') {
+                                    console.warn('Anonymous sign-in is disabled in Firebase Console. Please enable it in Authentication > Sign-in method > Anonymous.');
+                                    // Continue without authentication - some features might be limited
+                                } else {
+                                    console.error('Error during anonymous sign-in:', error);
+                                }
+                            });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error setting auth persistence:', error);
+                });
+                
         } catch (error) {
             console.error('Error initializing Firebase:', error);
             showLocationBanner('Error initializing the app. Please refresh the page.');
@@ -214,17 +236,8 @@
         // Expose db for waitForDbReady()
         window.db = db;
 
-        // Ensure the user is authenticated (anonymous) so rules allowing auth pass
-        // Safe to call early; if already signed in, this is a no-op
-        (async () => {
-            try {
-                if (!firebase.auth().currentUser) {
-                    await firebase.auth().signInAnonymously();
-                }
-            } catch (e) {
-                console.warn('Anonymous sign-in failed:', e?.message || e);
-            }
-        })();
+        // Authentication is now handled during Firebase initialization
+        // to properly handle the auth state and persistence
 
         // Game configuration
         const segments = [
