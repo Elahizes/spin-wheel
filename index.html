@@ -195,19 +195,23 @@
         
         // Firebase configuration
         const firebaseConfig = {
-        apiKey: "AIzaSyCO35JZoFm240m3SFLjGGzgFcsypAr_YkQ",
-        authDomain: "spin-5f3eb.firebaseapp.com",
-        projectId: "spin-5f3eb",
-        storageBucket: "spin-5f3eb.firebasestorage.app",
-        messagingSenderId: "124051980951",
-        appId: "1:124051980951:web:cffee7317163063d991fd2",
-        measurementId: "G-EG4SBN9C0H"
-    };
+            apiKey: "AIzaSyCO35JZoFm240m3SFLjGGzgFcsypAr_YkQ",
+            authDomain: "spin-5f3eb.firebaseapp.com",
+            projectId: "spin-5f3eb",
+            storageBucket: "spin-5f3eb.firebasestorage.app"
+        };
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        // expose for waitForDbReady()
+        // Initialize Firebase with error handling
+        let db;
+        try {
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Error initializing Firebase:', error);
+            showLocationBanner('Error initializing the app. Please refresh the page.');
+        }
+        // Expose db for waitForDbReady()
         window.db = db;
 
         // Ensure the user is authenticated (anonymous) so rules allowing auth pass
@@ -665,17 +669,67 @@
             }, { passive: true });
         }
         
-        // Enhanced location permission check with detailed logging
+        // Deprecated: Use getBrowserInfo() instead
+        function getMobileBrowserInfo() {
+            console.warn('getMobileBrowserInfo() is deprecated. Use getBrowserInfo() instead.');
+            return getBrowserInfo();
+        }
+
+        // Enhanced location permission check with detailed logging and browser-specific handling
         async function checkLocationPermission() {
             console.log('Checking location permissions...');
-            if (!navigator.permissions) return true; // Skip if permissions API not supported
+            const browserInfo = getBrowserInfo();
+            console.log('Browser info:', browserInfo);
+            
+            // Special handling for Android browsers
+            if (browserInfo.isAndroid) {
+                console.log('Android device detected');
+                
+                // For Android Brave, we need to be more permissive with permissions
+                if (browserInfo.isBrave) {
+                    console.log('Android Brave detected, using relaxed permission check');
+                    return true; // Let the browser handle the permission prompt
+                }
+                
+                // For Android Kiwi, we need to handle permissions differently
+                if (browserInfo.isKiwi) {
+                    console.log('Android Kiwi detected, using custom permission handling');
+                    // Kiwi sometimes needs a direct location request to trigger the permission prompt
+                    return true;
+                }
+            }
+            
+            // Handle browsers that don't support the Permissions API
+            if (!navigator.permissions) {
+                console.log('Permissions API not available, using fallback check');
+                return true; // Proceed with location request
+            }
             
             try {
-                const status = await navigator.permissions.query({ name: 'geolocation' });
-                return status.state === 'granted';
+                // Handle browsers that don't support the 'geolocation' permission name
+                let permissionStatus;
+                try {
+                    permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+                } catch (e) {
+                    // Some browsers (like older versions of Brave) might throw an error
+                    console.warn('Standard geolocation permission query failed, trying alternate name:', e);
+                    try {
+                        // Try alternate permission name for compatibility
+                        permissionStatus = await navigator.permissions.query({ name: 'geolocation', userVisibleOnly: true });
+                    } catch (e2) {
+                        console.warn('Alternate permission query failed, proceeding with location request:', e2);
+                        return true; // Proceed and let the browser handle the permission
+                    }
+                }
+                
+                // Log permission state for debugging
+                console.log('Permission state:', permissionStatus.state);
+                
+                // Return true for 'prompt' to allow the browser to show the permission prompt
+                return permissionStatus.state === 'granted' || permissionStatus.state === 'prompt';
             } catch (e) {
-                console.warn('Permission query failed:', e);
-                return true; // Assume granted if we can't check
+                console.warn('Permission check failed, proceeding with location request:', e);
+                return true; // Assume we can proceed
             }
         }
         
@@ -687,10 +741,116 @@
                    window.location.hostname === '127.0.0.1';
         }
 
-        // Function to initialize location services
+        // Function to request location with Android browser workarounds
+        async function requestLocationWithWorkarounds(options) {
+            const browserInfo = getBrowserInfo();
+            
+            // Special handling for Android browsers
+            if (browserInfo.isAndroid) {
+                // For Android Brave, use watchPosition with a timeout
+                if (browserInfo.isBrave) {
+                    console.log('Using watchPosition workaround for Android Brave');
+                    return new Promise((resolve, reject) => {
+                        const watchId = navigator.geolocation.watchPosition(
+                            (pos) => {
+                                navigator.geolocation.clearWatch(watchId);
+                                resolve(pos);
+                            },
+                            (err) => {
+                                navigator.geolocation.clearWatch(watchId);
+                                reject(err);
+                            },
+                            options
+                        );
+                        
+                        // Set timeout to clear watch if no response
+                        setTimeout(() => {
+                            navigator.geolocation.clearWatch(watchId);
+                            reject(new Error('Location request timed out'));
+                        }, (options.timeout || 10000) + 2000);
+                    });
+                }
+                
+                // For Android Kiwi, try to force a permission prompt
+                if (browserInfo.isKiwi) {
+                    console.log('Using direct location request for Android Kiwi');
+                    // First try to get a quick location
+                    try {
+                        const quickPos = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                ...options,
+                                timeout: 5000,
+                                maximumAge: 0
+                            });
+                        });
+                        if (quickPos) return quickPos;
+                    } catch (e) {
+                        console.log('Quick location attempt failed, trying full request');
+                    }
+                }
+            }
+            
+            // Standard getCurrentPosition for other cases
+            return new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, options);
+            });
+        }
+
+        // Function to handle location errors with better messages
+        function getLocationErrorMessage(error) {
+            const browserInfo = getBrowserInfo();
+            
+            // Common error messages
+            const messages = {
+                PERMISSION_DENIED: 'Location permission was denied. Please enable location access in your browser settings.',
+                POSITION_UNAVAILABLE: 'Location information is unavailable. Please check your device settings.',
+                TIMEOUT: 'Location request timed out. Please ensure your location services are enabled.'
+            };
+            
+            // Browser-specific guidance
+            if (browserInfo.isKiwi) {
+                messages.PERMISSION_DENIED = 'Please enable location access in Kiwi Browser settings. Go to Settings > Site settings > Location.';
+            } else if (browserInfo.isBrave) {
+                messages.PERMISSION_DENIED = 'Please enable location access in Brave Browser settings. Check both browser and device location settings.';
+            }
+            
+            return messages[Object.keys(messages).find(key => error[key] === error.code)] || 
+                   'Unable to get your location. Please check your browser settings.';
+        }
+
+        // Global browser info to avoid repeated detection
+        let browserInfo = null;
+        
+        // Function to get browser info (with caching)
+        function getBrowserInfo() {
+            if (!browserInfo) {
+                const ua = navigator.userAgent;
+                const isAndroid = /Android/i.test(ua);
+                const isBrave = /Brave\/(\d+)/i.test(ua) || navigator.brave !== undefined;
+                const isKiwi = /Kiwi/.test(ua);
+                const isChrome = /Chrome\/([0-9.]+)/.test(ua) && !isBrave && !isKiwi;
+                const versionMatch = ua.match(/(Chrome|Brave|KiwiBrowser)\/([0-9.]+)/i);
+                const version = versionMatch ? versionMatch[2] : 'unknown';
+                
+                browserInfo = {
+                    isAndroid,
+                    isBrave,
+                    isKiwi,
+                    isChrome,
+                    version,
+                    userAgent: ua
+                };
+            }
+            return browserInfo;
+        }
+        
+        // Function to initialize location services with enhanced browser compatibility
         async function initializeLocation() {
             // Don't block the game if location fails
             try {
+                // Get browser info
+                browserInfo = getBrowserInfo();
+                
                 // Check if we're in a secure context (required for geolocation on mobile)
                 if (!isSecureContext()) {
                     console.warn('Not in secure context - location services may be limited');
@@ -698,8 +858,13 @@
                     return false;
                 }
                 
+                // Get browser info and detect mobile
+                const isMobile = browserInfo.isAndroid || /iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                console.log('Browser details:', browserInfo);
                 console.log('Initializing location services...');
                 console.log('User Agent:', navigator.userAgent);
+                console.log('Is mobile device:', isMobile);
                 
                 if (!navigator.geolocation) {
                     console.error('Geolocation API not available');
@@ -713,16 +878,14 @@
                 const hasPermission = await checkLocationPermission();
                 console.log('Location permission status:', hasPermission);
                 
-                // Mobile detection
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                console.log('Is mobile device:', isMobile);
-                
-                // Location options
+                // Configure location options based on device type
                 const options = {
                     enableHighAccuracy: true,
-                    timeout: 10000,
+                    timeout: isMobile ? 20000 : 15000, // Longer timeout for mobile
                     maximumAge: 0
                 };
+                
+                console.log('Using location options:', options);
                 
                 console.log('Starting location services with options:', options);
                 
@@ -744,32 +907,71 @@
                                 reject(new Error('High accuracy location request timed out'));
                             }, gpsOptions.timeout + 1000);
                             
-                            navigator.geolocation.getCurrentPosition(
-                                (pos) => {
-                                    clearTimeout(timer);
-                                    console.log('High accuracy position received:', {
-                                        coords: {
-                                            latitude: pos.coords.latitude,
-                                            longitude: pos.coords.longitude,
-                                            accuracy: pos.coords.accuracy
-                                        },
-                                        timestamp: new Date(pos.timestamp || Date.now()).toISOString()
-                                    });
-                                    resolve(pos);
-                                },
-                                (error) => {
-                                    clearTimeout(timer);
-                                    console.error('High accuracy location error:', {
-                                        code: error.code,
-                                        message: error.message,
-                                        PERMISSION_DENIED: error.PERMISSION_DENIED,
-                                        POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
-                                        TIMEOUT: error.TIMEOUT
-                                    });
-                                    reject({ error, type: 'high' });
-                                },
-                                gpsOptions
-                            );
+                            // Add a fallback for browsers that might not trigger the error callback
+                            let positionReceived = false;
+                            let errorReceived = false;
+                            
+                            const positionSuccess = (pos) => {
+                                if (positionReceived) return; // Prevent multiple calls
+                                positionReceived = true;
+                                clearTimeout(timer);
+                                
+                                // Additional validation for position
+                                if (!pos || !pos.coords) {
+                                    console.error('Invalid position data received');
+                                    reject(new Error('Invalid position data'));
+                                    return;
+                                }
+                                
+                                console.log('High accuracy position received:', {
+                                    coords: {
+                                        latitude: pos.coords.latitude,
+                                        longitude: pos.coords.longitude,
+                                        accuracy: pos.coords.accuracy,
+                                        altitude: pos.coords.altitude,
+                                        altitudeAccuracy: pos.coords.altitudeAccuracy,
+                                        heading: pos.coords.heading,
+                                        speed: pos.coords.speed
+                                    },
+                                    timestamp: new Date(pos.timestamp || Date.now()).toISOString()
+                                });
+                                resolve(pos);
+                            };
+                            
+                            const positionError = (error) => {
+                                if (errorReceived) return; // Prevent multiple calls
+                                errorReceived = true;
+                                clearTimeout(timer);
+                                
+                                const errorInfo = {
+                                    code: error.code,
+                                    message: error.message,
+                                    PERMISSION_DENIED: error.PERMISSION_DENIED,
+                                    POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+                                    TIMEOUT: error.TIMEOUT
+                                };
+                                
+                                console.error('High accuracy location error:', errorInfo);
+                                
+                                // Special handling for Brave browser
+                                if (navigator.brave && error.code === 1) {
+                                    console.log('Brave browser detected with permission denied - showing custom message');
+                                    showLocationBanner('Please enable location access in Brave settings to continue.');
+                                }
+                                
+                                reject({ error, type: 'high' });
+                            };
+                            
+                            // Request position with error handling
+                            try {
+                                // Use our enhanced location request function
+                                requestLocationWithWorkarounds(gpsOptions)
+                                    .then(positionSuccess)
+                                    .catch(positionError);
+                            } catch (e) {
+                                console.error('Error calling getCurrentPosition:', e);
+                                positionError({ code: 0, message: e.message });
+                            }
                         });
                         
                         await handleLocationSuccess(position, true);
@@ -777,46 +979,104 @@
                     } catch (error) {
                         console.warn('High accuracy failed, trying low accuracy...', error);
                         
-                        // Fallback to network-based location
+                        // Fallback to network-based location with enhanced error handling
                         console.log('Trying low accuracy (network) location...');
                         try {
                             const position = await new Promise((resolve, reject) => {
                                 const networkOptions = {
                                     enableHighAccuracy: false,
-                                    timeout: 10000,
+                                    timeout: 15000, // Increased timeout for network location
                                     maximumAge: 30000
                                 };
                                 
                                 const timer = setTimeout(() => {
+                                    console.warn('Network location request timed out');
                                     reject(new Error('Network location request timed out'));
-                                }, networkOptions.timeout + 1000);
+                                }, networkOptions.timeout + 2000);
                                 
-                                navigator.geolocation.getCurrentPosition(
-                                    (pos) => {
-                                        clearTimeout(timer);
-                                        console.log('Network position received:', {
-                                            coords: {
-                                                latitude: pos.coords.latitude,
-                                                longitude: pos.coords.longitude,
-                                                accuracy: pos.coords.accuracy
-                                            },
-                                            timestamp: new Date(pos.timestamp || Date.now()).toISOString()
-                                        });
-                                        resolve(pos);
-                                    },
-                                    (error) => {
-                                        clearTimeout(timer);
-                                        console.error('Network location error:', {
-                                            code: error.code,
-                                            message: error.message,
-                                            PERMISSION_DENIED: error.PERMISSION_DENIED,
-                                            POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
-                                            TIMEOUT: error.TIMEOUT
-                                        });
-                                        reject({ error, type: 'low' });
-                                    },
-                                    networkOptions
-                                );
+                                let positionReceived = false;
+                                let errorReceived = false;
+                                
+                                const positionSuccess = (pos) => {
+                                    if (positionReceived) return;
+                                    positionReceived = true;
+                                    clearTimeout(timer);
+                                    
+                                    if (!pos || !pos.coords) {
+                                        console.error('Invalid network position data received');
+                                        reject(new Error('Invalid network position data'));
+                                        return;
+                                    }
+                                    
+                                    console.log('Network position received:', {
+                                        coords: {
+                                            latitude: pos.coords.latitude,
+                                            longitude: pos.coords.longitude,
+                                            accuracy: pos.coords.accuracy,
+                                            // Include additional position data for debugging
+                                            altitude: pos.coords.altitude,
+                                            altitudeAccuracy: pos.coords.altitudeAccuracy,
+                                            heading: pos.coords.heading,
+                                            speed: pos.coords.speed
+                                        },
+                                        timestamp: new Date(pos.timestamp || Date.now()).toISOString()
+                                    });
+                                    resolve(pos);
+                                };
+                                
+                                const positionError = (error) => {
+                                    if (errorReceived) return;
+                                    errorReceived = true;
+                                    clearTimeout(timer);
+                                    
+                                    const errorInfo = {
+                                        code: error.code,
+                                        message: error.message,
+                                        PERMISSION_DENIED: error.PERMISSION_DENIED,
+                                        POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+                                        TIMEOUT: error.TIMEOUT
+                                    };
+                                    
+                                    console.error('Network location error:', errorInfo);
+                                    
+                                    // Special handling for Kiwi browser
+                                    if (/Kiwi/.test(navigator.userAgent)) {
+                                        console.log('Kiwi browser detected - showing custom message');
+                                        showLocationBanner('Please check location permissions in Kiwi browser settings and ensure location is enabled.');
+                                    }
+                                    
+                                    reject({ error, type: 'low' });
+                                };
+                                
+                                // Special handling for Brave browser's aggressive privacy features
+                                if (navigator.brave) {
+                                    console.log('Brave browser detected - using watchPosition for better compatibility');
+                                    const watchId = navigator.geolocation.watchPosition(
+                                        (pos) => {
+                                            positionSuccess(pos);
+                                            // Clear the watch after getting a position
+                                            navigator.geolocation.clearWatch(watchId);
+                                        },
+                                        positionError,
+                                        networkOptions
+                                    );
+                                    
+                                    // Set a timeout to clear the watch if it's still active
+                                    setTimeout(() => {
+                                        navigator.geolocation.clearWatch(watchId);
+                                    }, networkOptions.timeout + 5000);
+                                } else {
+                                    // Standard getCurrentPosition for other browsers
+                                    try {
+                                        // Use our enhanced location request function
+                                        requestLocationWithWorkarounds(networkOptions)
+                                            .then(positionSuccess)
+                                            .catch(positionError);
+                                    } catch (e) {
+                                        console.error('Error in getCurrentPosition:', e);
+                                        positionError({ code: 0, message: e.message });
+                                    }
+                                }
                             });
                             
                             await handleLocationSuccess(position, false);
