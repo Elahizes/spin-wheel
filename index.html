@@ -687,101 +687,58 @@
                    window.location.hostname === '127.0.0.1';
         }
 
-        // Function to initialize location services with detailed debugging
+        // Function to initialize location services
         async function initializeLocation() {
-            // Check if we're in a secure context (required for geolocation on mobile)
-            if (!isSecureContext()) {
-                const errorMsg = 'Geolocation requires HTTPS. Please use a secure connection.';
-                console.error(errorMsg);
-                showLocationBanner('Please use HTTPS to enable location services.');
-                return false;
-            }
-            
-            console.log('Initializing location services...');
-            console.log('User Agent:', navigator.userAgent);
-            
-            if (!navigator.geolocation) {
-                const errorMsg = 'Geolocation API not available in this browser';
-                console.error(errorMsg);
-                showLocationBanner('Your browser does not support geolocation.');
-                return false;
-            }
-            console.log('Initializing location services...');
-            console.log('User Agent:', navigator.userAgent);
-            if (!navigator.geolocation) {
-                const errorMsg = 'Geolocation API not available in this browser';
-                console.error(errorMsg);
-                showLocationBanner('Your browser does not support geolocation.');
-                return false;
-            }
-            
-            console.log('Geolocation API is available');
-            
-            // Check and request location permission
+            // Don't block the game if location fails
             try {
+                // Check if we're in a secure context (required for geolocation on mobile)
+                if (!isSecureContext()) {
+                    console.warn('Not in secure context - location services may be limited');
+                    showLocationBanner('Please use HTTPS for better location accuracy.');
+                    return false;
+                }
+                
+                console.log('Initializing location services...');
+                console.log('User Agent:', navigator.userAgent);
+                
+                if (!navigator.geolocation) {
+                    console.error('Geolocation API not available');
+                    showLocationBanner('Your browser does not support geolocation.');
+                    return false;
+                }
+                
+                console.log('Geolocation API is available');
+                
+                // Check location permission
                 const hasPermission = await checkLocationPermission();
                 console.log('Location permission status:', hasPermission);
                 
-                if (!hasPermission) {
-                    // Try to request permission by calling getCurrentPosition
-                    console.log('Attempting to request location permission...');
-                    await new Promise((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(
-                            () => resolve(),
-                            (error) => {
-                                console.error('Location permission denied:', error);
-                                showLocationBanner('Please enable location access in your browser settings to continue.');
-                                reject(error);
-                            },
-                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-                        );
-                    });
-                }
-            } catch (error) {
-                console.error('Location permission error:', error);
-                return false;
-            }
-
-            // Mobile-specific handling
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            console.log('Is mobile device:', isMobile);
-            
-            // Set different timeouts for mobile vs desktop
-            const locationOptions = {
-                mobile: {
-                    highAccuracy: {
-                        enableHighAccuracy: true,
-                        timeout: 20000,  // 20 seconds for GPS on mobile
-                        maximumAge: 0
-                    },
-                    lowAccuracy: {
-                        enableHighAccuracy: false,
-                        timeout: 10000,  // 10 seconds for network on mobile
-                        maximumAge: 0
-                    }
-                },
-                desktop: {
-                    highAccuracy: {
-                        enableHighAccuracy: true,
-                        timeout: 10000,  // 10 seconds for desktop
-                        maximumAge: 0
-                    }
-                }
-            };
-            
-            const options = isMobile ? locationOptions.mobile : locationOptions.desktop;
-            
-            try {
+                // Mobile detection
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                console.log('Is mobile device:', isMobile);
+                
+                // Location options
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                };
+                
+                console.log('Starting location services with options:', options);
+                
                 if (isMobile) {
                     console.log('Starting mobile location flow with options:', options);
                     console.log('Mobile device detected, requesting location...');
                     
-                    // First try high accuracy (GPS)
+                    // First, try to get the current position with high accuracy
                     console.log('Trying high accuracy (GPS) location...');
                     try {
                         const position = await new Promise((resolve, reject) => {
-                            const gpsOptions = options.highAccuracy;
-                            console.log('Requesting position with options:', gpsOptions);
+                            const gpsOptions = {
+                                enableHighAccuracy: true,
+                                timeout: 15000,
+                                maximumAge: 0
+                            };
                             
                             const timer = setTimeout(() => {
                                 reject(new Error('High accuracy location request timed out'));
@@ -804,7 +761,10 @@
                                     clearTimeout(timer);
                                     console.error('High accuracy location error:', {
                                         code: error.code,
-                                        message: error.message
+                                        message: error.message,
+                                        PERMISSION_DENIED: error.PERMISSION_DENIED,
+                                        POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+                                        TIMEOUT: error.TIMEOUT
                                     });
                                     reject({ error, type: 'high' });
                                 },
@@ -821,13 +781,11 @@
                         console.log('Trying low accuracy (network) location...');
                         try {
                             const position = await new Promise((resolve, reject) => {
-                                const networkOptions = options.lowAccuracy || {
+                                const networkOptions = {
                                     enableHighAccuracy: false,
                                     timeout: 10000,
-                                    maximumAge: 0
+                                    maximumAge: 30000
                                 };
-                                
-                                console.log('Requesting network position with options:', networkOptions);
                                 
                                 const timer = setTimeout(() => {
                                     reject(new Error('Network location request timed out'));
@@ -850,7 +808,10 @@
                                         clearTimeout(timer);
                                         console.error('Network location error:', {
                                             code: error.code,
-                                            message: error.message
+                                            message: error.message,
+                                            PERMISSION_DENIED: error.PERMISSION_DENIED,
+                                            POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+                                            TIMEOUT: error.TIMEOUT
                                         });
                                         reject({ error, type: 'low' });
                                     },
@@ -902,155 +863,36 @@
                 }
             } catch (error) {
                 console.error('Location initialization failed:', error);
-                showLocationBanner('Failed to initialize location services. Please refresh the page.');
+                showLocationBanner('Location services are not available. Some features may be limited.');
                 return false;
             }
             
-            if (isMobile) {
-                console.log('Starting mobile location flow with options:', options);
-                console.log('Mobile device detected, requesting location...');
-                
-                // First, try to get the current position with high accuracy
-                try {
-                    // First try high accuracy (GPS)
-                    console.log('Trying high accuracy (GPS) location...');
-                    const position = await new Promise((resolve, reject) => {
-                        const gpsOptions = options.highAccuracy;
-                        console.log('Requesting position with options:', options);
-                        
-                        const timer = setTimeout(() => {
-                            reject(new Error('High accuracy location request timed out'));
-                        }, 16000);
-                        
-                        navigator.geolocation.getCurrentPosition(
-                            (pos) => {
-                                clearTimeout(timer);
-                                console.log('High accuracy position received:', {
-                                    coords: {
-                                        latitude: pos.coords.latitude,
-                                        longitude: pos.coords.longitude,
-                                        accuracy: pos.coords.accuracy
-                                    },
-                                    timestamp: new Date(pos.timestamp).toISOString()
-                                });
-                                resolve(pos);
-                            },
-                            (error) => {
-                                clearTimeout(timer);
-                                console.error('High accuracy location error:', {
-                                    code: error.code,
-                                    message: error.message,
-                                    PERMISSION_DENIED: error.PERMISSION_DENIED,
-                                    POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
-                                    TIMEOUT: error.TIMEOUT
-                                });
-                                reject({ error, type: 'high' });
-                            },
-                            gpsOptions
-                        );
-                    });
-                    
-                    handleLocationSuccess(position, true);
-                } catch (error) {
-                    console.warn('High accuracy failed, trying low accuracy...', error);
-                    try {
-                        // Fallback to network-based location
-                        console.log('Trying low accuracy (network) location...');
-                        const position = await new Promise((resolve, reject) => {
-                            const networkOptions = options.lowAccuracy || {
-                                enableHighAccuracy: false,
-                                timeout: 10000,
-                                maximumAge: 0
-                            };
-                            
-                            console.log('Requesting network position with options:', networkOptions);
-                            
-                            const timer = setTimeout(() => {
-                                reject(new Error('Network location request timed out'));
-                            }, (networkOptions.timeout || 10000) + 1000);
-                            
-                            navigator.geolocation.getCurrentPosition(
-                                (pos) => {
-                                    clearTimeout(timer);
-                                    console.log('Network position received:', {
-                                        coords: {
-                                            latitude: pos.coords.latitude,
-                                            longitude: pos.coords.longitude,
-                                            accuracy: pos.coords.accuracy
-                                        },
-                                        timestamp: new Date(pos.timestamp || Date.now()).toISOString()
-                                    });
-                                    resolve(pos);
-                                },
-                                (error) => {
-                                    clearTimeout(timer);
-                                    console.error('Network location error:', {
-                                        code: error.code,
-                                        message: error.message
-                                    });
-                                    reject({ error, type: 'low' });
-                                },
-                                networkOptions
-                            );
-                        });
-                        
-                        handleLocationSuccess(position, false);
-                    } catch (finalError) {
-                        console.error('All location attempts failed:', finalError);
-                        
-                        // Provide specific guidance based on error
-                        let errorMessage = 'Could not get your location. ';
-                        
-                        if (finalError.error) {
-                            if (finalError.error.code === 1) {
-                                errorMessage += 'Please enable location services in your browser settings.';
-                            } else if (finalError.error.code === 2) {
-                                errorMessage += 'Location information is unavailable. Please check your internet connection.';
-                            } else if (finalError.error.code === 3) {
-                                errorMessage += 'Location request timed out. Please try again in an open area.';
-                            }
-                        }
-                        
-                        showLocationBanner(errorMessage);
-                        
-                        // As a last resort, try to send the best available location
-                        if (lastValidLocation) {
-                            console.log('Using last known valid location as fallback');
-                            userLocation = { ...lastValidLocation };
-                            await waitForDbReady();
-                            await sendInitialLocationOnce();
-                        }
-                    }
-                } catch (error) {
-                    console.error('Mobile location initialization failed:', error);
-                    throw error; // Re-throw to be caught by the outer try-catch
-            } else {
-                // Desktop behavior
-                console.log('Starting desktop location flow');
-                startLocationWatcher();
-                requestLocation().then(async () => {
-                    await waitForValidLocation(5000);
-                    await waitForDbReady();
-                    await sendInitialLocationOnce();
-                }).catch(error => {
-                    console.error('Desktop location request failed:', error);
-                });
-            }
-            
-            return true; // Indicate successful initialization
+            return false;
         }
 
         // Initialize the game
-        document.addEventListener('DOMContentLoaded', async () => {
-            createWheel();
-            initTouchControls();
-            
-            // Start location services with error handling
+        document.addEventListener('DOMContentLoaded', () => {
             try {
-                await initializeLocation();
+                // Create wheel and initialize UI first
+                createWheel();
+                initTouchControls();
+                
+                // Set up spin button
+                const spinBtn = document.getElementById('spinButton');
+                if (spinBtn) {
+                    spinBtn.addEventListener('click', spinWheel);
+                }
+                
+                // Initialize location services in the background
+                initializeLocation().catch(error => {
+                    console.error('Location initialization error:', error);
+                    showLocationBanner('Location services are not available. Some features may be limited.');
+                });
+                
+                console.log('Game initialized successfully');
             } catch (error) {
-                console.error('Failed to initialize location:', error);
-                showLocationBanner('Location services failed to start. Please refresh the page.');
+                console.error('Game initialization failed:', error);
+                alert('Failed to initialize the game. Please refresh the page.');
             }
             
             // Add touch feedback to buttons
