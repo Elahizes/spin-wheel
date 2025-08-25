@@ -423,7 +423,8 @@
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prize</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">City</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sefer</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                 </tr>
                             </thead>
@@ -882,14 +883,9 @@
                             formattedDate = date.toLocaleString();
                         }
                         
-                        // Format location
-                        let locationText = 'N/A';
-                        if (winner.region) {
-                            locationText = `${winner.region}`;
-                            if (winner.city) locationText += `, ${winner.city}`;
-                            if (winner.woreda) locationText += `, ${winner.woreda}`;
-                            if (winner.kebele) locationText += `, ${winner.kebele}`;
-                        }
+                        // Get location details
+                        const city = winner.city || 'N/A';
+                        const sefer = winner.sefer || 'N/A';
                         
                         row.innerHTML = `
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -904,7 +900,10 @@
                                 ${winner.phone || 'N/A'}
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-500">
-                                ${locationText}
+                                ${city}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                ${sefer}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 ${formattedDate}
